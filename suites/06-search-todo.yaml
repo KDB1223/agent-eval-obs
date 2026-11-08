@@ -1,0 +1,36 @@
+id: search-todo
+title: Find the TODO that mentions shipping
+category: tool-use
+prompt: |
+  One source file contains a TODO about shipping the report. Search the
+  workspace and reply with that file's relative path and nothing else.
+rubric: The answer is the relative path src/b.py, found with the search tool.
+tools:
+  - list_dir
+  - search
+  - read_file
+max_steps: 8
+files:
+  src/a.py: |
+    def ready():
+        return True
+  src/b.py: |
+    def ship():
+        # TODO: ship the report
+        return False
+  notes/readme.txt: |
+    There is no marker in this note.
+graders:
+  - id: searched
+    type: tool_used
+    tool: search
+  - id: path
+    type: exact
+    target: answer
+    value: src/b.py
+mock:
+  - thought: Search for the shipping TODO instead of opening every file.
+    tool: search
+    arguments:
+      pattern: "TODO: ship the report"
+  - final: src/b.py

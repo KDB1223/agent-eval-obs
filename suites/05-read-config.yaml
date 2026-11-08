@@ -1,0 +1,43 @@
+id: read-config
+title: Read a service port from config
+category: tool-use
+prompt: |
+  Find the TCP port the billing service listens on. The answer is in a JSON
+  file under this workspace. Use the tools, then reply with one sentence
+  that includes the port number.
+rubric: The agent reads the config file and the final answer contains port 4815.
+tools:
+  - list_dir
+  - read_file
+  - search
+max_steps: 8
+files:
+  config/app.json: |
+    {
+      "service": "billing",
+      "port": 4815,
+      "region": "lab"
+    }
+  notes.txt: |
+    The port is not written in this note.
+graders:
+  - id: listed
+    type: tool_used
+    tool: list_dir
+  - id: read
+    type: tool_used
+    tool: read_file
+  - id: port
+    type: regex
+    target: answer
+    pattern: '\b4815\b'
+mock:
+  - thought: List the workspace before opening a file.
+    tool: list_dir
+    arguments:
+      path: "."
+  - thought: The JSON config should carry the port.
+    tool: read_file
+    arguments:
+      path: config/app.json
+  - final: The billing service listens on port 4815.

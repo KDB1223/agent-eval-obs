@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install
+        run: python -m pip install -e ".[dev]"
+      - name: Pytest
+        run: pytest
+      - name: Offline mock suite
+        run: |
+          aeo run --adapter mock --run-id ci-mock
+          grep -q "pass rate     8/8 (100%)" .aeo/runs/ci-mock/scoreboard.txt
+          test -s .aeo/runs/ci-mock/tasks/fix-sum/trajectory.jsonl
+      - name: Compare fixture runs
+        run: aeo compare examples/fixtures/runs/baseline examples/fixtures/runs/candidate
+      - name: Replay a fixture trajectory
+        run: aeo replay examples/fixtures/runs/baseline --task fix-sum

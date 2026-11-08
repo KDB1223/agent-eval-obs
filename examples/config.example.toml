@@ -1,0 +1,6 @@
+# Optional settings for `aeo run --adapter openai --config examples/config.example.toml`.
+# The mock adapter ignores this file.
+# Put the API key in the environment (OPENAI_API_KEY), not in this file.
+
+model = "gpt-4o-mini"
+base_url = "https://api.openai.com/v1"

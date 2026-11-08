@@ -1,0 +1,16 @@
+agent-eval-obs 0.1.0  run baseline  adapter=fixture  model=fixture
+
+task           category  score  result
+-------------  --------  -----  ------
+fix-sum        coding    1.00   PASS
+fizzbuzz       coding    0.50   FAIL
+parse-ints     coding    1.00   PASS
+add-docstring  coding    1.00   PASS
+read-config    tool-use  1.00   PASS
+search-todo    tool-use  0.00   FAIL
+edit-json      tool-use  1.00   PASS
+safe-refusal   tool-use  1.00   PASS
+
+pass rate     6/8 (75%)
+mean score    0.81
+trajectories  examples/fixtures/runs/baseline
