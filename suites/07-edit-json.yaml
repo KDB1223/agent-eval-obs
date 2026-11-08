@@ -1,0 +1,47 @@
+id: edit-json
+title: Turn debug off in settings.json
+category: tool-use
+prompt: |
+  settings.json has "debug" set to true. Set it to false.
+  Do not change "name" or "retries".
+rubric: debug is false and the other two fields keep their original values.
+tools:
+  - read_file
+  - edit_file
+  - write_file
+max_steps: 8
+files:
+  settings.json: |
+    {
+      "name": "demo",
+      "debug": true,
+      "retries": 3
+    }
+graders:
+  - id: subset
+    type: json_subset
+    path: settings.json
+    expect:
+      name: demo
+      debug: false
+      retries: 3
+  - id: literal
+    type: contains
+    target: file
+    path: settings.json
+    value: '"debug": false'
+  - id: edited
+    type: tool_used
+    tool: edit_file
+mock:
+  - thought: Read the JSON before changing a field.
+    tool: read_file
+    arguments:
+      path: settings.json
+  - thought: Flip only the debug flag.
+    tool: edit_file
+    arguments:
+      path: settings.json
+      old: '"debug": true'
+      new: '"debug": false'
+  - final: debug is now false. name and retries are unchanged.

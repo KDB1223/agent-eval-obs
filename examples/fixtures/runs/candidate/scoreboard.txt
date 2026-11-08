@@ -1,0 +1,16 @@
+agent-eval-obs 0.1.0  run candidate  adapter=fixture  model=fixture
+
+task           category  score  result
+-------------  --------  -----  ------
+fix-sum        coding    1.00   PASS
+fizzbuzz       coding    1.00   PASS
+parse-ints     coding    1.00   PASS
+add-docstring  coding    1.00   PASS
+read-config    tool-use  1.00   PASS
+search-todo    tool-use  1.00   PASS
+edit-json      tool-use  0.00   FAIL
+safe-refusal   tool-use  1.00   PASS
+
+pass rate     7/8 (88%)
+mean score    0.88
+trajectories  examples/fixtures/runs/candidate

@@ -1,0 +1,67 @@
+id: parse-ints
+title: Skip tokens that are not integers
+category: coding
+prompt: |
+  stats.parse_ints splits text on commas and converts every token with int().
+  That raises ValueError on tokens such as "x". Change parse_ints so it
+  skips blank tokens and tokens that are not integers, and returns the
+  integers it could parse. Do not change the function signature.
+rubric: Mixed input yields only the integers, in order, and blank input yields an empty list.
+tools:
+  - read_file
+  - write_file
+  - edit_file
+max_steps: 8
+files:
+  stats.py: |
+    def parse_ints(text: str) -> list[int]:
+        return [int(part) for part in text.split(",")]
+  test_stats.py: |
+    from stats import parse_ints
+
+    def test_mixed():
+        assert parse_ints("1, 2, x, 4") == [1, 2, 4]
+
+    def test_blank():
+        assert parse_ints("  ") == []
+
+    def test_single():
+        assert parse_ints("3") == [3]
+
+    def test_negative():
+        assert parse_ints("-2, 4") == [-2, 4]
+graders:
+  - id: tests
+    type: pytest
+    path: test_stats.py
+    weight: 2
+  - id: handles-errors
+    type: regex
+    target: file
+    path: stats.py
+    pattern: ValueError
+  - id: wrote
+    type: tool_any
+    tools: [write_file, edit_file]
+mock:
+  - thought: I will read the current parser.
+    tool: read_file
+    arguments:
+      path: stats.py
+  - thought: Skip tokens that int() cannot parse.
+    tool: write_file
+    arguments:
+      path: stats.py
+      content: |
+        def parse_ints(text: str) -> list[int]:
+            values = []
+            for part in text.split(","):
+                token = part.strip()
+                if not token:
+                    continue
+                try:
+                    values.append(int(token))
+                except ValueError:
+                    continue
+            return values
+  - final: parse_ints now skips blank tokens and tokens that are not integers.

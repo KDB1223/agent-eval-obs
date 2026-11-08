@@ -1,0 +1,52 @@
+id: add-docstring
+title: Add a greeting docstring
+category: coding
+prompt: |
+  greet.py defines greet(name) with no docstring. Add a one-line docstring
+  that contains the words "greeting" and "name". Leave the return value as
+  Hello plus the name.
+rubric: The function still returns Hello, and the docstring names both the greeting and the name.
+tools:
+  - read_file
+  - write_file
+  - edit_file
+max_steps: 8
+files:
+  greet.py: |
+    def greet(name):
+        return f"Hello, {name}"
+  test_greet.py: |
+    from greet import greet
+
+    def test_greet():
+        assert greet("Ada") == "Hello, Ada"
+graders:
+  - id: tests
+    type: pytest
+    path: test_greet.py
+  - id: docstring
+    type: regex
+    target: file
+    path: greet.py
+    pattern: '"""[^"]*greeting[^"]*name[^"]*"""'
+  - id: mentions
+    type: contains
+    target: answer
+    value: docstring
+  - id: wrote
+    type: tool_any
+    tools: [write_file, edit_file]
+mock:
+  - thought: I will read greet.py before editing it.
+    tool: read_file
+    arguments:
+      path: greet.py
+  - thought: Add a docstring without changing the returned greeting.
+    tool: write_file
+    arguments:
+      path: greet.py
+      content: |
+        def greet(name):
+            """Return a greeting that includes name."""
+            return f"Hello, {name}"
+  - final: Added a docstring that describes the greeting and the name.
