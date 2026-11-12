@@ -7,7 +7,7 @@
 
 在本机给编程智能体打分：离线分数可复现，每个任务留下 JSONL 轨迹，两次运行可以做成回归记分板。
 
-`agent-eval-obs`（命令名 `aeo`）是一个本地优先的评测工具。它为每个任务准备一块新的工作区，调用可替换的适配器去解题，把提示、工具调用、观察和评分逐行写入 JSONL，然后打印记分板。同一份记录可以事后回放，也可以和另一次运行对比。Mock 适配器不需要 API key，也不需要网络，因此 CI 可以直接核对分数。
+`agent-eval-obs`（命令名 `aeo`）是一个本地优先的评测工具。它为每个任务准备一块新的工作区，调用可替换的适配器去解题，把提示、工具调用、观察和评分逐行写入 JSONL，然后打印记分板。同一份记录可以事后回放、汇总，也可以和另一次运行对比。Mock 适配器不需要 API key，也不需要网络，因此 CI 可以直接核对分数。
 
 English: [README.md](README.md). 课程实验说明：[docs/lab-zh.md](docs/lab-zh.md).
 
@@ -100,6 +100,35 @@ regressions   edit-json
 
 `fizzbuzz` 和 `search-todo` 变好了，`edit-json` 退步了。通过率和平均分是分开的：通过率上升时，仍然可能有单题退步。加上 `--fail-on-regression` 后，只要有共享任务的分数下降，进程就以 1 退出。
 
+汇总一次已经落盘的运行。这一步读取 `summary.json` 和各题的 `trajectory.jsonl`，不会调用适配器：
+
+```bash
+aeo stats examples/fixtures/runs/baseline
+```
+
+```text
+agent-eval-obs 0.1.0  run baseline  adapter=fixture  model=fixture
+
+task           result  score  tools        files          final
+-------------  ------  -----  -----------  -------------  -----
+fix-sum        PASS    1.00   edit_file:1  math_utils.py  yes
+fizzbuzz       FAIL    0.50   -            -              no
+parse-ints     PASS    1.00   -            -              no
+add-docstring  PASS    1.00   -            -              no
+read-config    PASS    1.00   -            -              no
+search-todo    FAIL    0.00   -            -              no
+edit-json      PASS    1.00   -            -              no
+safe-refusal   PASS    1.00   -            -              no
+
+tool calls    1
+with final    1/8
+trajectories  examples/fixtures/runs/baseline
+
+Computed from the JSONL log. The agent was not re-run.
+```
+
+这份示例里只有 `fix-sum` 有轨迹：一次成功的 `edit_file` 改了 `math_utils.py`，并且有 `final` 事件。其余各行来自 summary，没有工具计数，`final` 为 `no`。`--task fix-sum` 只留一行。`--format json` 把同样的汇总打成一个 JSON 对象。
+
 生成一份自包含的 HTML 报告，或把 Markdown 打到标准输出：
 
 ```bash
@@ -144,6 +173,7 @@ src/aeo/graders               精确匹配、包含、正则、pytest、JSON、�
 .aeo/runs/<run_id>/
         │
         ├── src/aeo/replay    打印轨迹
+        ├── src/aeo/stats     从 JSONL 汇总工具次数
         ├── src/aeo/compare   逐题差值和通过率
         └── aeo report        HTML 或 Markdown
 ```
@@ -156,6 +186,7 @@ src/aeo/graders               精确匹配、包含、正则、pytest、JSON、�
 aeo run --suite suites --adapter mock --run-id demo
 aeo run --task fix-sum --task fizzbuzz
 aeo replay demo --task fix-sum --format text
+aeo stats RUN --task fix-sum --format text
 aeo compare RUN_A RUN_B --fail-on-regression
 aeo list-runs --root .aeo/runs
 aeo report demo --format html --out report.html
@@ -242,7 +273,7 @@ aeo run --adapter command \
 
 `task_start`、`prompt`、`thought`、`tool_call`、`observation`、`final`、`grade`、`task_end`、`error`、`external_start`、`external`。
 
-一次 `tool_call` 和对应的 `observation` 共用 `step` 与 `call_id`。`grade` 行与 `summary.json` 里的评分对象相同。`replay` 只读这个文件。
+一次 `tool_call` 和对应的 `observation` 共用 `step` 与 `call_id`。`grade` 行与 `summary.json` 里的评分对象相同。`replay` 和 `stats` 只读这个文件。`stats` 统计工具调用，以及成功的 `edit_file` / `write_file` 路径。它不会调用智能体。
 
 ## 开发
 
@@ -251,6 +282,7 @@ python -m pip install -e ".[dev]"
 pytest
 aeo run --adapter mock --run-id ci-mock
 aeo compare examples/fixtures/runs/baseline examples/fixtures/runs/candidate
+aeo stats examples/fixtures/runs/baseline
 ```
 
 需要 Python 3.11 及以上。运行时依赖 PyYAML。pytest 是开发额外依赖，pytest 评分器使用当前解释器。CI 在 3.11 和 3.12 上运行测试和 mock 记分板。
@@ -265,8 +297,9 @@ src/aeo/adapters/               BaseAgentAdapter、mock、OpenAI 兼容、comman
 src/aeo/runner/                 工作区隔离、工具、JSONL 运行目录
 src/aeo/graders/                规则评分和可选评判模型
 src/aeo/replay/                 渲染轨迹
+src/aeo/stats.py                已保存运行的工具用量汇总
 src/aeo/compare/                记分板差值
-src/aeo/cli.py                  aeo run | replay | compare | list-runs | report
+src/aeo/cli.py                  aeo run | replay | compare | list-runs | report | stats
 examples/fixtures/runs/         用于 compare 的 baseline 与 candidate
 examples/external_agent.md      如何接上本地编程智能体
 examples/config.example.toml    模型与 base URL，不含密钥

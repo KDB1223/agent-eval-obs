@@ -7,7 +7,7 @@
 
 Grade coding agents on your machine: reproducible offline scores, a JSONL trajectory for every task, and a regression scoreboard between two runs.
 
-`agent-eval-obs` (`aeo`) is a local-first harness. It prepares a fresh workspace for each task, asks a pluggable adapter to solve it, writes every prompt, tool call, observation, and grade to JSONL, then prints a scoreboard. The same files can be replayed later or diffed against another run. The mock adapter needs no API key and no network, so CI can check the score.
+`agent-eval-obs` (`aeo`) is a local-first harness. It prepares a fresh workspace for each task, asks a pluggable adapter to solve it, writes every prompt, tool call, observation, and grade to JSONL, then prints a scoreboard. The same files can be replayed later, summarized, or diffed against another run. The mock adapter needs no API key and no network, so CI can check the score.
 
 中文说明：[README.zh-CN.md](README.zh-CN.md)。课程实验：[docs/lab-zh.md](docs/lab-zh.md)。
 
@@ -119,6 +119,35 @@ regressions   edit-json
 
 `fizzbuzz` and `search-todo` improved. `edit-json` regressed. Pass rate and mean score move on their own, so a higher pass rate can still hide a regression. Add `--fail-on-regression` to exit 1 when any shared task score falls.
 
+Summarize tool use for a run that is already on disk. This reads `summary.json` and each `trajectory.jsonl`. It does not call the adapter:
+
+```bash
+aeo stats examples/fixtures/runs/baseline
+```
+
+```text
+agent-eval-obs 0.1.0  run baseline  adapter=fixture  model=fixture
+
+task           result  score  tools        files          final
+-------------  ------  -----  -----------  -------------  -----
+fix-sum        PASS    1.00   edit_file:1  math_utils.py  yes
+fizzbuzz       FAIL    0.50   -            -              no
+parse-ints     PASS    1.00   -            -              no
+add-docstring  PASS    1.00   -            -              no
+read-config    PASS    1.00   -            -              no
+search-todo    FAIL    0.00   -            -              no
+edit-json      PASS    1.00   -            -              no
+safe-refusal   PASS    1.00   -            -              no
+
+tool calls    1
+with final    1/8
+trajectories  examples/fixtures/runs/baseline
+
+Computed from the JSONL log. The agent was not re-run.
+```
+
+In that fixture only `fix-sum` has a trajectory: one successful `edit_file` on `math_utils.py`, and a `final` event. The other rows come from the summary, with no tool counts and `final` of `no`. `--task fix-sum` limits the table to one row. `--format json` prints the same totals as one JSON object.
+
 Write a one-file HTML report, or a Markdown summary on stdout:
 
 ```bash
@@ -163,6 +192,7 @@ src/aeo/graders               exact, contains, regex, pytest, JSON, tool use, ju
 .aeo/runs/<run_id>/
         │
         ├── src/aeo/replay    print the trajectory
+        ├── src/aeo/stats     tool counts from the JSONL log
         ├── src/aeo/compare   per-task delta and pass rate
         └── aeo report        HTML or Markdown
 ```
@@ -175,6 +205,7 @@ The runner owns the tools. An in-loop adapter only proposes the next action. Pat
 aeo run --suite suites --adapter mock --run-id demo
 aeo run --task fix-sum --task fizzbuzz          # repeat --task to filter
 aeo replay demo --task fix-sum --format text    # or json
+aeo stats RUN --task fix-sum --format text      # or json
 aeo compare RUN_A RUN_B --fail-on-regression
 aeo list-runs --root .aeo/runs
 aeo report demo --format html --out report.html
@@ -263,7 +294,7 @@ Each line of `trajectory.jsonl` is one JSON object. `kind` is one of:
 
 `task_start`, `prompt`, `thought`, `tool_call`, `observation`, `final`, `grade`, `task_end`, `error`, `external_start`, `external`.
 
-A `tool_call` and its `observation` share `step` and `call_id`. `grade` rows are the same objects stored in `summary.json`. `replay` reads this file and stops there.
+A `tool_call` and its `observation` share `step` and `call_id`. `grade` rows are the same objects stored in `summary.json`. `replay` and `stats` read this file and stop there. `stats` counts tool calls and successful `edit_file` / `write_file` paths. It does not call the agent.
 
 ## Development
 
@@ -272,6 +303,7 @@ python -m pip install -e ".[dev]"
 pytest
 aeo run --adapter mock --run-id ci-mock
 aeo compare examples/fixtures/runs/baseline examples/fixtures/runs/candidate
+aeo stats examples/fixtures/runs/baseline
 ```
 
 Python 3.11 or newer. Runtime dependency: PyYAML. pytest is the dev extra, and the pytest grader uses the same interpreter. CI runs the test suite and the mock scoreboard on 3.11 and 3.12.
@@ -286,8 +318,9 @@ src/aeo/adapters/               BaseAgentAdapter, mock, OpenAI-compatible, comma
 src/aeo/runner/                 workspace jail, tool runtime, JSONL run directory
 src/aeo/graders/                rule graders and the optional judge
 src/aeo/replay/                 render a trajectory
+src/aeo/stats.py                tool-use summary of a saved run
 src/aeo/compare/                scoreboard diff
-src/aeo/cli.py                  aeo run | replay | compare | list-runs | report
+src/aeo/cli.py                  aeo run | replay | compare | list-runs | report | stats
 examples/fixtures/runs/         baseline and candidate for compare
 examples/external_agent.md      how to wrap a local coding agent
 examples/config.example.toml    model and base URL, no secrets
