@@ -1,4 +1,4 @@
-"""Command-line interface: run, replay, compare, list-runs, report."""
+"""Command-line interface: run, replay, compare, list-runs, report, stats."""
 
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ from aeo.report import render_html, render_markdown
 from aeo.runner.execute import run_suite
 from aeo.runner.store import load_summary, resolve_run
 from aeo.scoreboard import render_table
+from aeo.stats import render_stats
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -87,6 +88,13 @@ def build_parser() -> argparse.ArgumentParser:
     report.add_argument("--out", default=None, help="output path, or - for stdout")
     report.add_argument("--root", default=".aeo/runs")
     report.set_defaults(func=_cmd_report)
+
+    stats = commands.add_parser("stats", help="summarize tool use from a saved run")
+    stats.add_argument("run", help="run id or path to a run directory")
+    stats.add_argument("--task", default=None, help="one task id")
+    stats.add_argument("--root", default=".aeo/runs")
+    stats.add_argument("--format", choices=["text", "json"], default="text")
+    stats.set_defaults(func=_cmd_stats)
     return parser
 
 
@@ -179,6 +187,13 @@ def _cmd_report(args: argparse.Namespace) -> int:
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(body, encoding="utf-8")
     print(destination, file=sys.stderr)
+    return 0
+
+
+def _cmd_stats(args: argparse.Namespace) -> int:
+    run_dir = resolve_run(args.run, args.root)
+    summary = load_summary(run_dir)
+    sys.stdout.write(render_stats(summary, run_dir, task_id=args.task, fmt=args.format))
     return 0
 
 
