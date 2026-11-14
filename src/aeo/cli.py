@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 import tomllib
 from pathlib import Path
 
 from aeo import __version__
 from aeo.adapters.factory import build_adapter
-from aeo.compare.diff import format_compare
+from aeo.compare.diff import compare_runs, format_compare
 from aeo.errors import AeoError, UsageError
 from aeo.graders.llm_judge import LLMJudge, judge_enabled_from_env
 from aeo.replay.render import render_run
@@ -71,6 +72,7 @@ def build_parser() -> argparse.ArgumentParser:
     compare.add_argument("run_a", help="baseline run id or path")
     compare.add_argument("run_b", help="candidate run id or path")
     compare.add_argument("--root", default=".aeo/runs")
+    compare.add_argument("--format", choices=["text", "json"], default="text")
     compare.add_argument(
         "--fail-on-regression",
         action="store_true",
@@ -137,8 +139,13 @@ def _cmd_replay(args: argparse.Namespace) -> int:
 def _cmd_compare(args: argparse.Namespace) -> int:
     left = load_summary(resolve_run(args.run_a, args.root))
     right = load_summary(resolve_run(args.run_b, args.root))
-    text, regressions = format_compare(left, right)
-    sys.stdout.write(text)
+    if args.format == "json":
+        payload = compare_runs(left, right)
+        sys.stdout.write(json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
+        regressions = payload["regressions"]
+    else:
+        text, regressions = format_compare(left, right)
+        sys.stdout.write(text)
     if args.fail_on_regression and regressions:
         return 1
     return 0

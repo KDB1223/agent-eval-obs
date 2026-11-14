@@ -94,11 +94,16 @@ safe-refusal   1.00     PASS  1.00     PASS  +0.00
 pass rate     6/8  ->  7/8  (+1)
 mean score    0.81  ->  0.88  (+0.06)
 
+category  A pass  A mean  B pass  B mean  delta
+--------  ------  ------  ------  ------  -----
+coding    3/4     0.88    4/4     1.00    +0.12
+tool-use  3/4     0.75    3/4     0.75    +0.00
+
 improvements  fizzbuzz, search-todo
 regressions   edit-json
 ```
 
-`fizzbuzz` 和 `search-todo` 变好了，`edit-json` 退步了。通过率和平均分是分开的：通过率上升时，仍然可能有单题退步。加上 `--fail-on-regression` 后，只要有共享任务的分数下降，进程就以 1 退出。
+`fizzbuzz` 和 `search-todo` 变好了，`edit-json` 退步了。分类表把题目汇总起来：`coding` 从 3/4（平均 0.88）到 4/4（平均 1.00），`tool-use` 仍是 3/4、平均 0.75。一类的合计可以不变，总通过率也可以从 6/8 升到 7/8，同时这一类里仍有题目退步。加上 `--fail-on-regression` 后，只要有共享任务的分数下降，进程就以 1 退出。`aeo compare --format json` 把同一次对比打成一个 JSON 对象。
 
 汇总一次已经落盘的运行。这一步读取 `summary.json` 和各题的 `trajectory.jsonl`，不会调用适配器：
 
@@ -174,7 +179,7 @@ src/aeo/graders               精确匹配、包含、正则、pytest、JSON、�
         │
         ├── src/aeo/replay    打印轨迹
         ├── src/aeo/stats     从 JSONL 汇总工具次数
-        ├── src/aeo/compare   逐题差值和通过率
+        ├── src/aeo/compare   逐题差值、分类汇总和通过率
         └── aeo report        HTML 或 Markdown
 ```
 
@@ -187,7 +192,7 @@ aeo run --suite suites --adapter mock --run-id demo
 aeo run --task fix-sum --task fizzbuzz
 aeo replay demo --task fix-sum --format text
 aeo stats RUN --task fix-sum --format text
-aeo compare RUN_A RUN_B --fail-on-regression
+aeo compare RUN_A RUN_B --format text --fail-on-regression    # 或 json
 aeo list-runs --root .aeo/runs
 aeo report demo --format html --out report.html
 ```
