@@ -60,11 +60,12 @@ aeo replay lab --task fix-sum
 aeo compare examples/fixtures/runs/baseline examples/fixtures/runs/candidate
 ```
 
-记录这三行的含义：
+记录这几行的含义：
 
 - `improvements` 里的题目
 - `regressions` 里的题目
 - `pass rate` 和 `mean score` 各自怎么变
+- 分类表里 `tool-use` 仍是 `3/4`、平均分 `0.75`：这一类合计可以不变，同时 `edit-json` 退步
 
 候选运行的通过率更高，同时 `edit-json` 从通过变成失败。实验报告需要单独写出这道退步的题，不能只用「7/8 比 6/8 更好」收尾。
 

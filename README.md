@@ -113,11 +113,16 @@ safe-refusal   1.00     PASS  1.00     PASS  +0.00
 pass rate     6/8  ->  7/8  (+1)
 mean score    0.81  ->  0.88  (+0.06)
 
+category  A pass  A mean  B pass  B mean  delta
+--------  ------  ------  ------  ------  -----
+coding    3/4     0.88    4/4     1.00    +0.12
+tool-use  3/4     0.75    3/4     0.75    +0.00
+
 improvements  fizzbuzz, search-todo
 regressions   edit-json
 ```
 
-`fizzbuzz` and `search-todo` improved. `edit-json` regressed. Pass rate and mean score move on their own, so a higher pass rate can still hide a regression. Add `--fail-on-regression` to exit 1 when any shared task score falls.
+`fizzbuzz` and `search-todo` improved. `edit-json` regressed. The category table rolls those tasks up: `coding` moves from 3/4 (mean 0.88) to 4/4 (mean 1.00), while `tool-use` stays at 3/4 and mean 0.75. A category total can stay flat, and the overall pass rate can rise from 6/8 to 7/8, while a task in that category still regresses. Add `--fail-on-regression` to exit 1 when any shared task score falls. `aeo compare --format json` prints the same comparison as one JSON object.
 
 Summarize tool use for a run that is already on disk. This reads `summary.json` and each `trajectory.jsonl`. It does not call the adapter:
 
@@ -193,7 +198,7 @@ src/aeo/graders               exact, contains, regex, pytest, JSON, tool use, ju
         │
         ├── src/aeo/replay    print the trajectory
         ├── src/aeo/stats     tool counts from the JSONL log
-        ├── src/aeo/compare   per-task delta and pass rate
+        ├── src/aeo/compare   per-task delta, category rollup, and pass rate
         └── aeo report        HTML or Markdown
 ```
 
@@ -206,7 +211,7 @@ aeo run --suite suites --adapter mock --run-id demo
 aeo run --task fix-sum --task fizzbuzz          # repeat --task to filter
 aeo replay demo --task fix-sum --format text    # or json
 aeo stats RUN --task fix-sum --format text      # or json
-aeo compare RUN_A RUN_B --fail-on-regression
+aeo compare RUN_A RUN_B --format text --fail-on-regression    # or json
 aeo list-runs --root .aeo/runs
 aeo report demo --format html --out report.html
 ```
