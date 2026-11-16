@@ -38,8 +38,16 @@ safe-refusal   tool-use  1.00   PASS
 
 pass rate     8/8 (100%)
 mean score    1.00
+
+category  pass  mean
+--------  ----  ----
+coding    4/4   1.00
+tool-use  4/4   1.00
+
 trajectories  .aeo/runs/demo
 ```
+
+单次运行的记分板和 `aeo report` 也会按类别汇总分数。
 
 这行 `8/8` 是离线约定。Mock 适配器按每个任务文件里的 `mock:` 脚本走，运行器会真的执行工具，评分器再检查工作区。同一套题再跑一次，各题分数不变。
 

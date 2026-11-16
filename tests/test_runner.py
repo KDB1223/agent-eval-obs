@@ -55,6 +55,9 @@ def test_mock_suite_is_reproducible(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     board = stdout.getvalue()
     assert "pass rate     8/8 (100%)" in board
     assert "mean score    1.00" in board
+    assert board.index("mean score") < board.index("category  pass  mean") < board.index("trajectories")
+    assert "coding    4/4   1.00" in board
+    assert "tool-use  4/4   1.00\n\ntrajectories" in board
     assert (tmp_path / "run-a" / "scoreboard.txt").read_text(encoding="utf-8") == board
 
     trajectory = (tmp_path / "run-a" / "tasks" / "fix-sum" / "trajectory.jsonl").read_text(encoding="utf-8")

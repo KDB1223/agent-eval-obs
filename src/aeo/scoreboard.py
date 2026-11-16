@@ -22,6 +22,32 @@ def render_table(headers: list[str], rows: list[list[str]]) -> str:
     return "\n".join(lines)
 
 
+def category_totals(tasks: list[dict]) -> list[dict]:
+    """Pass count and unweighted mean score for each category.
+
+    Categories stay in first-seen order. A missing or empty category is
+    an empty string, and an empty task list returns no rows.
+    """
+    buckets: dict[str, list[dict]] = {}
+    for task in tasks:
+        name = str(task.get("category") or "")
+        buckets.setdefault(name, []).append(task)
+    rows: list[dict] = []
+    for name, members in buckets.items():
+        scores = [float(task["score"]) for task in members]
+        passed = sum(1 for task in members if bool(task["passed"]))
+        total = len(members)
+        rows.append(
+            {
+                "category": name,
+                "passed": passed,
+                "total": total,
+                "mean": sum(scores) / total,
+            }
+        )
+    return rows
+
+
 def format_scoreboard(summary: dict) -> str:
     """Render the human scoreboard stored next to a run."""
     rows: list[list[str]] = []
@@ -51,7 +77,13 @@ def format_scoreboard(summary: dict) -> str:
         "",
         f"pass rate     {passed}/{total} ({percent:.0f}%)",
         f"mean score    {float(summary['mean_score']):.2f}",
-        f"trajectories  {run_dir}",
-        "",
     ]
+    totals = category_totals(summary["tasks"])
+    if totals:
+        category_rows = [
+            [row["category"], f"{row['passed']}/{row['total']}", f"{row['mean']:.2f}"]
+            for row in totals
+        ]
+        lines.extend(["", render_table(["category", "pass", "mean"], category_rows), ""])
+    lines.extend([f"trajectories  {run_dir}", ""])
     return "\n".join(lines)

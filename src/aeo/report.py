@@ -7,6 +7,7 @@ from pathlib import Path
 
 from aeo.jsonl import read_jsonl
 from aeo.replay.render import render_trajectory
+from aeo.scoreboard import category_totals
 
 _CSS = """
 :root { color-scheme: light dark; }
@@ -50,6 +51,7 @@ def render_markdown(summary: dict, run_dir: Path) -> str:
             )
         )
     lines.append("")
+    lines.extend(_markdown_categories(summary["tasks"]))
     for task in summary["tasks"]:
         lines.extend(_markdown_task(task, run_dir))
     return "\n".join(lines).rstrip() + "\n"
@@ -95,12 +97,55 @@ def render_html(summary: dict, run_dir: Path) -> str:
 {''.join(rows)}
 </tbody>
 </table>
-<h2>Trajectories</h2>
+{_html_categories(summary["tasks"])}<h2>Trajectories</h2>
 {''.join(sections)}
 <p class="note">Rendered from the JSONL log. The agent was not re-run.</p>
 </body>
 </html>
 """
+
+
+def _markdown_categories(tasks: list[dict]) -> list[str]:
+    rows = category_totals(tasks)
+    if not rows:
+        return []
+    lines = [
+        "| category | pass | mean |",
+        "| --- | --- | ---: |",
+    ]
+    for row in rows:
+        lines.append(
+            "| {cat} | {passed}/{total} | {mean:.2f} |".format(
+                cat=_md(row["category"]),
+                passed=row["passed"],
+                total=row["total"],
+                mean=row["mean"],
+            )
+        )
+    lines.append("")
+    return lines
+
+
+def _html_categories(tasks: list[dict]) -> str:
+    rows = category_totals(tasks)
+    if not rows:
+        return ""
+    body = [
+        "<tr>"
+        f"<td>{_esc(row['category'])}</td>"
+        f"<td>{row['passed']}/{row['total']}</td>"
+        f"<td>{row['mean']:.2f}</td>"
+        "</tr>"
+        for row in rows
+    ]
+    return (
+        "<h2>Categories</h2>\n"
+        "<table>\n"
+        "<thead><tr><th>category</th><th>pass</th><th>mean</th></tr></thead>\n"
+        "<tbody>\n"
+        + "".join(body)
+        + "\n</tbody>\n</table>\n"
+    )
 
 
 def _markdown_task(task: dict, run_dir: Path) -> list[str]:
