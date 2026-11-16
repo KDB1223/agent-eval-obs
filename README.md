@@ -42,8 +42,16 @@ safe-refusal   tool-use  1.00   PASS
 
 pass rate     8/8 (100%)
 mean score    1.00
+
+category  pass  mean
+--------  ----  ----
+coding    4/4   1.00
+tool-use  4/4   1.00
+
 trajectories  .aeo/runs/demo
 ```
+
+The run scoreboard and `aeo report` also roll scores up by category.
 
 That `8/8` is the offline contract. The mock adapter replays the `mock:` script stored in each task file, the runner really executes the tools, and the graders score the workspace. A second run with the same suite produces the same per-task scores.
 
