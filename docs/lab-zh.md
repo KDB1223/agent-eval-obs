@@ -10,7 +10,7 @@
 
 1. 一份不依赖网络、重复运行分数不变的记分板。
 2. 某一题轨迹里，用户提示、一次工具调用、以及紧跟着的观察，三者如何对应。
-3. 两次运行之间，哪一题变好了，哪一题退步了。通过率上升并不能代替这张逐题表。
+3. 两次运行之间，哪一题变好了，哪一题退步了。通过率上升并不能代替这张逐题表。某一侧没过的题，可以用 `aeo failures` 从已经保存的运行里直接列出来。
 
 ## 和 dm-code-agent 的关系
 
@@ -70,6 +70,15 @@ aeo compare examples/fixtures/runs/baseline examples/fixtures/runs/candidate
 候选运行的通过率更高，同时 `edit-json` 从通过变成失败。实验报告需要单独写出这道退步的题，不能只用「7/8 比 6/8 更好」收尾。
 
 加上 `--fail-on-regression` 再跑一次，确认进程退出码是 1。这是 CI 里用来卡住退步的开关。
+
+记分板上的 FAIL 也可以单独列出来：
+
+```bash
+aeo failures examples/fixtures/runs/baseline
+aeo failures examples/fixtures/runs/candidate
+```
+
+baseline 里失败的是 `fizzbuzz`（0.50）和 `search-todo`（0.00）。candidate 里失败的是 `edit-json`（0.00）。命令只读已经保存的运行，不重新调用适配器，也不重新评分。这两份示例的 `grades` 是空数组，也没有 `result.json`，所以评分列和 detail 是 `-`，不是猜出来的原因。一次真实的 `aeo run` 会把评分写进 `summary.json`、`result.json` 和轨迹；保存过的 `detail` 会出现在这里。跳过的评分（例如没开的 `llm_judge`）单独列在 skipped 列，不算失败。
 
 ### 3. 改一道题，让分数动起来
 

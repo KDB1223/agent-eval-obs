@@ -7,7 +7,7 @@
 
 在本机给编程智能体打分：离线分数可复现，每个任务留下 JSONL 轨迹，两次运行可以做成回归记分板。
 
-`agent-eval-obs`（命令名 `aeo`）是一个本地优先的评测工具。它为每个任务准备一块新的工作区，调用可替换的适配器去解题，把提示、工具调用、观察和评分逐行写入 JSONL，然后打印记分板。同一份记录可以事后回放、汇总，也可以和另一次运行对比。Mock 适配器不需要 API key，也不需要网络，因此 CI 可以直接核对分数。
+`agent-eval-obs`（命令名 `aeo`）是一个本地优先的评测工具。它为每个任务准备一块新的工作区，调用可替换的适配器去解题，把提示、工具调用、观察和评分逐行写入 JSONL，然后打印记分板。同一份记录可以事后回放、汇总、列出失败，也可以和另一次运行对比。Mock 适配器不需要 API key，也不需要网络，因此 CI 可以直接核对分数。
 
 English: [README.md](README.md). 课程实验说明：[docs/lab-zh.md](docs/lab-zh.md).
 
@@ -142,6 +142,30 @@ Computed from the JSONL log. The agent was not re-run.
 
 这份示例里只有 `fix-sum` 有轨迹：一次成功的 `edit_file` 改了 `math_utils.py`，并且有 `final` 事件。其余各行来自 summary，没有工具计数，`final` 为 `no`。`--task fix-sum` 只留一行。`--format json` 把同样的汇总打成一个 JSON 对象。
 
+列出一次已经落盘的运行里没有通过的题目。这一步只读保存的结果，不调用适配器，也不再给工作区打分：
+
+```bash
+aeo failures examples/fixtures/runs/baseline
+```
+
+```text
+agent-eval-obs 0.1.0  run baseline  adapter=fixture  model=fixture
+
+task         category  score  failed graders  skipped  detail
+-----------  --------  -----  --------------  -------  ------
+fizzbuzz     coding    0.50   -               -        -
+search-todo  tool-use  0.00   -               -        -
+
+failed        2/8
+run dir       examples/fixtures/runs/baseline
+
+Read from the saved run. The agent was not re-run.
+```
+
+baseline 里失败的是 `fizzbuzz`（0.50）和 `search-todo`（0.00），顺序与 summary 一致。0.50 这种部分分数仍然算失败。candidate 里唯一的失败是 `edit-json`，分数 0.00。这两份示例的 `grades` 都是空数组，也没有 `result.json`，所以评分列和 detail 是 `-`，命令不会编造评分器 id 或原因。
+
+评分按这个顺序取第一个非空列表：任务在 `summary.json` 里的 `grades`，然后是 `tasks/<id>/result.json`，最后是轨迹里 `kind` 为 `grade` 的事件。一次真实的 `aeo run` 会把评分写进这三处。失败评分的 id、type 和保存下来的 `detail` 会在有记录时出现。跳过的评分（例如没开的可选 `llm_judge`）写在 `skipped` 列，不算失败。任务上非空的 `error` 会进 detail。`--task fizzbuzz` 只留一行。如果这道题通过了，命令打印 `no failures`，退出码仍是 0。`--format json` 把同一份清单打成一个 JSON 对象。退出码 0 表示报告本身成功，即使清单不是空的。
+
 生成一份自包含的 HTML 报告，或把 Markdown 打到标准输出：
 
 ```bash
@@ -187,6 +211,7 @@ src/aeo/graders               精确匹配、包含、正则、pytest、JSON、�
         │
         ├── src/aeo/replay    打印轨迹
         ├── src/aeo/stats     从 JSONL 汇总工具次数
+        ├── src/aeo/failures  从已保存的运行列出失败题目和评分
         ├── src/aeo/compare   逐题差值、分类汇总和通过率
         └── aeo report        HTML 或 Markdown
 ```
@@ -200,6 +225,7 @@ aeo run --suite suites --adapter mock --run-id demo
 aeo run --task fix-sum --task fizzbuzz
 aeo replay demo --task fix-sum --format text
 aeo stats RUN --task fix-sum --format text
+aeo failures RUN --task TASK_ID --format text   # 或 json
 aeo compare RUN_A RUN_B --format text --fail-on-regression    # 或 json
 aeo list-runs --root .aeo/runs
 aeo report demo --format html --out report.html
@@ -286,7 +312,7 @@ aeo run --adapter command \
 
 `task_start`、`prompt`、`thought`、`tool_call`、`observation`、`final`、`grade`、`task_end`、`error`、`external_start`、`external`。
 
-一次 `tool_call` 和对应的 `observation` 共用 `step` 与 `call_id`。`grade` 行与 `summary.json` 里的评分对象相同。`replay` 和 `stats` 只读这个文件。`stats` 统计工具调用，以及成功的 `edit_file` / `write_file` 路径。它不会调用智能体。
+一次 `tool_call` 和对应的 `observation` 共用 `step` 与 `call_id`。`grade` 行与 `summary.json` 里的评分对象相同。`replay` 和 `stats` 只读这个文件。`stats` 统计工具调用，以及成功的 `edit_file` / `write_file` 路径。`failures` 只有在该题的 `summary.json` 和 `result.json` 都没有非空 `grades` 时，才使用这里的 `grade` 事件。这些命令都不会调用智能体。
 
 ## 开发
 
@@ -296,6 +322,7 @@ pytest
 aeo run --adapter mock --run-id ci-mock
 aeo compare examples/fixtures/runs/baseline examples/fixtures/runs/candidate
 aeo stats examples/fixtures/runs/baseline
+aeo failures examples/fixtures/runs/baseline
 ```
 
 需要 Python 3.11 及以上。运行时依赖 PyYAML。pytest 是开发额外依赖，pytest 评分器使用当前解释器。CI 在 3.11 和 3.12 上运行测试和 mock 记分板。
@@ -311,8 +338,9 @@ src/aeo/runner/                 工作区隔离、工具、JSONL 运行目录
 src/aeo/graders/                规则评分和可选评判模型
 src/aeo/replay/                 渲染轨迹
 src/aeo/stats.py                已保存运行的工具用量汇总
+src/aeo/failures.py             已保存运行的失败题目和评分
 src/aeo/compare/                记分板差值
-src/aeo/cli.py                  aeo run | replay | compare | list-runs | report | stats
+src/aeo/cli.py                  aeo run | replay | compare | list-runs | report | stats | failures
 examples/fixtures/runs/         用于 compare 的 baseline 与 candidate
 examples/external_agent.md      如何接上本地编程智能体
 examples/config.example.toml    模型与 base URL，不含密钥

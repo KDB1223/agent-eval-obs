@@ -29,3 +29,7 @@ jobs:
         run: aeo compare examples/fixtures/runs/baseline examples/fixtures/runs/candidate
       - name: Replay a fixture trajectory
         run: aeo replay examples/fixtures/runs/baseline --task fix-sum
+      - name: List fixture failures
+        run: |
+          aeo failures examples/fixtures/runs/baseline
+          aeo failures examples/fixtures/runs/candidate
