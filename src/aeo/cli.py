@@ -1,4 +1,4 @@
-"""Command-line interface: run, replay, compare, list-runs, report, stats, failures."""
+"""Command-line interface: run, replay, compare, list-runs, list-tasks, report, stats, failures."""
 
 from __future__ import annotations
 
@@ -14,12 +14,14 @@ from aeo.compare.diff import compare_runs, format_compare
 from aeo.errors import AeoError, UsageError
 from aeo.failures import render_failures
 from aeo.graders.llm_judge import LLMJudge, judge_enabled_from_env
+from aeo.inventory import render_inventory
 from aeo.replay.render import render_run
 from aeo.report import render_html, render_markdown
 from aeo.runner.execute import run_suite
 from aeo.runner.store import load_summary, resolve_run
 from aeo.scoreboard import render_table
 from aeo.stats import render_stats
+from aeo.suites.loader import load_suite
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -84,6 +86,16 @@ def build_parser() -> argparse.ArgumentParser:
     listing = commands.add_parser("list-runs", help="list saved runs")
     listing.add_argument("--root", default=".aeo/runs")
     listing.set_defaults(func=_cmd_list)
+
+    tasks_cmd = commands.add_parser("list-tasks", help="inventory a task suite from its files")
+    tasks_cmd.add_argument("--suite", default="suites", help="directory of task YAML files (default: suites)")
+    tasks_cmd.add_argument("--format", choices=["text", "json"], default="text")
+    tasks_cmd.add_argument(
+        "--fail-on-incomplete",
+        action="store_true",
+        help="exit 1 when a task has no mock steps",
+    )
+    tasks_cmd.set_defaults(func=_cmd_list_tasks)
 
     report = commands.add_parser("report", help="write an HTML or Markdown summary")
     report.add_argument("run", help="run id or path to a run directory")
@@ -155,6 +167,15 @@ def _cmd_compare(args: argparse.Namespace) -> int:
         text, regressions = format_compare(left, right)
         sys.stdout.write(text)
     if args.fail_on_regression and regressions:
+        return 1
+    return 0
+
+
+def _cmd_list_tasks(args: argparse.Namespace) -> int:
+    suite = Path(args.suite)
+    tasks = load_suite(suite)
+    sys.stdout.write(render_inventory(tasks, suite, fmt=args.format))
+    if args.fail_on_incomplete and any(not task.mock_steps for task in tasks):
         return 1
     return 0
 

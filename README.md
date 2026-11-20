@@ -185,6 +185,37 @@ Read from the saved run. The agent was not re-run.
 
 Grades are taken from the first source that has a non-empty list: the task's `grades` in `summary.json`, then `tasks/<id>/result.json`, then events with `kind` `grade` in the trajectory. A real `aeo run` writes those grades. A failed grader's id, type, and saved `detail` show up when they are present. A skipped grader, such as an optional `llm_judge` left off, is listed under `skipped` and is not counted as a failure. A non-empty task `error` is included in the detail. `--task fizzbuzz` limits the table to one task. If that task passed, the command prints `no failures` and still exits 0. `--format json` prints the same inventory as one JSON object. Exit 0 means the report itself succeeded, including when the list is not empty.
 
+List the gold task set from the suite files. This does not run an adapter, grade anything, or write a run directory:
+
+```bash
+aeo list-tasks --suite suites
+```
+
+```text
+agent-eval-obs 0.1.0  suite suites
+
+task           category  graders                                                      tools                                       mock  files
+-------------  --------  -----------------------------------------------------------  ------------------------------------------  ----  -----
+fix-sum        coding    pytest, contains×2, regex, tool_used×2, llm_judge?           read_file, edit_file, list_dir              3     2
+fizzbuzz       coding    pytest, contains, tool_any                                   read_file, write_file, edit_file            3     2
+parse-ints     coding    pytest, regex, tool_any                                      read_file, write_file, edit_file            3     2
+add-docstring  coding    pytest, regex, contains, tool_any                            read_file, write_file, edit_file            3     2
+read-config    tool-use  tool_used×2, regex                                           list_dir, read_file, search                 3     2
+search-todo    tool-use  tool_used, exact                                             list_dir, search, read_file                 2     3
+edit-json      tool-use  json_subset, contains, tool_used                             read_file, edit_file, write_file            3     1
+safe-refusal   tool-use  regex, tool_absent×2, no_path_escape, file_absent, contains  list_dir, read_file, write_file, edit_file  1     1
+
+tasks             8
+categories        coding 4, tool-use 4
+graders           pytest 4, contains 6, regex 5, tool_used 6, llm_judge 1, tool_any 3, exact 1, json_subset 1, tool_absent 2, no_path_escape 1, file_absent 1
+with mock         8/8
+optional graders  1
+
+Listed from the suite files. No agent was run.
+```
+
+Rows follow filename order. `graders` lists types in declared order. A repeated type on one task collapses (`contains×2`), and an optional grader is marked with `?` (`llm_judge?` on `fix-sum`). A type that is both required and optional on the same task keeps both counts, for example `contains×2 (1 optional)`. `tools` is `-` when the task allows none. `mock` is the number of mock steps, and `files` is the number of starter files. The footer counts tasks, categories in first-seen order, grader entries of each type, tasks with at least one mock step, and graders with `required: false`. `--format json` prints that same inventory as one JSON object and nothing else: `version`, `suite`, `tasks` (`id`, `category`, `graders` with `id` / `type` / `required`, `tools`, `mock`, `files`), and the rollups `task_count`, `categories`, `grader_types`, `with_mock`, and `optional_graders`. `--fail-on-incomplete` exits 1 when any loaded task has no mock steps, because the offline CI adapter depends on those scripts. A suite whose tasks all have a mock still exits 0. An optional grader is not an incomplete task. A missing, empty, or invalid suite exits 2.
+
 Write a one-file HTML report, or a Markdown summary on stdout:
 
 ```bash
@@ -215,6 +246,7 @@ A task score is the weighted mean of the graders that actually ran. The optional
 ```text
 suites/*.yaml                 task prompt, starter files, graders, mock script
         │
+        ├── src/aeo/inventory  list-tasks from the files; no adapter and no run
         ▼
 src/aeo/runner                seed a jailed workspace, loop until a final answer
         │
@@ -247,10 +279,11 @@ aeo stats RUN --task fix-sum --format text      # or json
 aeo failures RUN --task TASK_ID --format text   # or json
 aeo compare RUN_A RUN_B --format text --fail-on-regression    # or json
 aeo list-runs --root .aeo/runs
+aeo list-tasks --suite suites --format text     # or json; --fail-on-incomplete
 aeo report demo --format html --out report.html
 ```
 
-`RUN` is a run id under `--root` (default `.aeo/runs`) or a path to a directory that contains `summary.json`.
+`RUN` is a run id under `--root` (default `.aeo/runs`) or a path to a directory that contains `summary.json`. `list-tasks` does not take a run id. It reads `--suite` (default `suites`) and does not write `.aeo/runs`.
 
 ## Tasks
 
@@ -340,13 +373,14 @@ A `tool_call` and its `observation` share `step` and `call_id`. `grade` rows are
 ```bash
 python -m pip install -e ".[dev]"
 pytest
+aeo list-tasks --suite suites --fail-on-incomplete
 aeo run --adapter mock --run-id ci-mock
 aeo compare examples/fixtures/runs/baseline examples/fixtures/runs/candidate
 aeo stats examples/fixtures/runs/baseline
 aeo failures examples/fixtures/runs/baseline
 ```
 
-Python 3.11 or newer. Runtime dependency: PyYAML. pytest is the dev extra, and the pytest grader uses the same interpreter. CI runs the test suite and the mock scoreboard on 3.11 and 3.12.
+Python 3.11 or newer. Runtime dependency: PyYAML. pytest is the dev extra, and the pytest grader uses the same interpreter. CI runs the test suite, `aeo list-tasks` on the shipped suite, and the mock scoreboard on 3.11 and 3.12.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -360,8 +394,9 @@ src/aeo/graders/                rule graders and the optional judge
 src/aeo/replay/                 render a trajectory
 src/aeo/stats.py                tool-use summary of a saved run
 src/aeo/failures.py             failed tasks and graders from a saved run
+src/aeo/inventory.py            task inventory from suite files
 src/aeo/compare/                scoreboard diff
-src/aeo/cli.py                  aeo run | replay | compare | list-runs | report | stats | failures
+src/aeo/cli.py                  aeo run | replay | compare | list-runs | list-tasks | report | stats | failures
 examples/fixtures/runs/         baseline and candidate for compare
 examples/external_agent.md      how to wrap a local coding agent
 examples/config.example.toml    model and base URL, no secrets
