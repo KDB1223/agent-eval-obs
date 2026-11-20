@@ -166,6 +166,37 @@ baseline 里失败的是 `fizzbuzz`（0.50）和 `search-todo`（0.00），顺�
 
 评分按这个顺序取第一个非空列表：任务在 `summary.json` 里的 `grades`，然后是 `tasks/<id>/result.json`，最后是轨迹里 `kind` 为 `grade` 的事件。一次真实的 `aeo run` 会把评分写进这三处。失败评分的 id、type 和保存下来的 `detail` 会在有记录时出现。跳过的评分（例如没开的可选 `llm_judge`）写在 `skipped` 列，不算失败。任务上非空的 `error` 会进 detail。`--task fizzbuzz` 只留一行。如果这道题通过了，命令打印 `no failures`，退出码仍是 0。`--format json` 把同一份清单打成一个 JSON 对象。退出码 0 表示报告本身成功，即使清单不是空的。
 
+按题目文件列出这套题的覆盖情况。这一步不运行适配器，不评分，也不写运行目录：
+
+```bash
+aeo list-tasks --suite suites
+```
+
+```text
+agent-eval-obs 0.1.0  suite suites
+
+task           category  graders                                                      tools                                       mock  files
+-------------  --------  -----------------------------------------------------------  ------------------------------------------  ----  -----
+fix-sum        coding    pytest, contains×2, regex, tool_used×2, llm_judge?           read_file, edit_file, list_dir              3     2
+fizzbuzz       coding    pytest, contains, tool_any                                   read_file, write_file, edit_file            3     2
+parse-ints     coding    pytest, regex, tool_any                                      read_file, write_file, edit_file            3     2
+add-docstring  coding    pytest, regex, contains, tool_any                            read_file, write_file, edit_file            3     2
+read-config    tool-use  tool_used×2, regex                                           list_dir, read_file, search                 3     2
+search-todo    tool-use  tool_used, exact                                             list_dir, search, read_file                 2     3
+edit-json      tool-use  json_subset, contains, tool_used                             read_file, edit_file, write_file            3     1
+safe-refusal   tool-use  regex, tool_absent×2, no_path_escape, file_absent, contains  list_dir, read_file, write_file, edit_file  1     1
+
+tasks             8
+categories        coding 4, tool-use 4
+graders           pytest 4, contains 6, regex 5, tool_used 6, llm_judge 1, tool_any 3, exact 1, json_subset 1, tool_absent 2, no_path_escape 1, file_absent 1
+with mock         8/8
+optional graders  1
+
+Listed from the suite files. No agent was run.
+```
+
+行序就是文件名顺序。`graders` 按声明顺序列出类型。同一题里重复的类型会合并（`contains×2`）。可选评分带 `?`（`fix-sum` 的 `llm_judge?`）。同一类型既有必过又有可选时，两种次数都保留，例如 `contains×2 (1 optional)`。没有工具时 `tools` 是 `-`。`mock` 是 mock 步数，`files` 是初始文件数。表下面汇总题数、按首次出现排列的类别、各评分器类型的条目数、至少有一步 mock 的题，以及 `required: false` 的评分。`--format json` 把同一份清单打成一个 JSON 对象，后面没有别的输出：`version`、`suite`、`tasks`（`id`、`category`、含 `id` / `type` / `required` 的 `graders`、`tools`、`mock`、`files`），以及汇总字段 `task_count`、`categories`、`grader_types`、`with_mock`、`optional_graders`。`--fail-on-incomplete` 在任一已加载题目没有 mock 步时退出码为 1，因为离线 CI 的适配器依赖这些脚本。每道题都有 mock 时退出码仍是 0。可选评分不算未完成。套件缺失、为空或无法通过校验时退出码为 2。
+
 生成一份自包含的 HTML 报告，或把 Markdown 打到标准输出：
 
 ```bash
@@ -196,6 +227,7 @@ tasks/<task-id>/workspace/    # 智能体停下时的文件
 ```text
 suites/*.yaml                 题目：提示、初始文件、评分器、mock 脚本
         │
+        ├── src/aeo/inventory  从题目文件列覆盖；不调用适配器，不写运行
         ▼
 src/aeo/runner                准备隔离工作区，循环到最终回答
         │
@@ -228,10 +260,11 @@ aeo stats RUN --task fix-sum --format text
 aeo failures RUN --task TASK_ID --format text   # 或 json
 aeo compare RUN_A RUN_B --format text --fail-on-regression    # 或 json
 aeo list-runs --root .aeo/runs
+aeo list-tasks --suite suites --format text     # 或 json；--fail-on-incomplete
 aeo report demo --format html --out report.html
 ```
 
-`RUN` 可以是 `--root`（默认 `.aeo/runs`）下的运行编号，也可以是含有 `summary.json` 的目录。
+`RUN` 可以是 `--root`（默认 `.aeo/runs`）下的运行编号，也可以是含有 `summary.json` 的目录。`list-tasks` 不接收运行编号。它读 `--suite`（默认 `suites`），不写 `.aeo/runs`。
 
 ## 题目
 
@@ -319,13 +352,14 @@ aeo run --adapter command \
 ```bash
 python -m pip install -e ".[dev]"
 pytest
+aeo list-tasks --suite suites --fail-on-incomplete
 aeo run --adapter mock --run-id ci-mock
 aeo compare examples/fixtures/runs/baseline examples/fixtures/runs/candidate
 aeo stats examples/fixtures/runs/baseline
 aeo failures examples/fixtures/runs/baseline
 ```
 
-需要 Python 3.11 及以上。运行时依赖 PyYAML。pytest 是开发额外依赖，pytest 评分器使用当前解释器。CI 在 3.11 和 3.12 上运行测试和 mock 记分板。
+需要 Python 3.11 及以上。运行时依赖 PyYAML。pytest 是开发额外依赖，pytest 评分器使用当前解释器。CI 在 3.11 和 3.12 上运行测试、对自带套件执行 `aeo list-tasks`，以及 mock 记分板。
 
 见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
@@ -339,8 +373,9 @@ src/aeo/graders/                规则评分和可选评判模型
 src/aeo/replay/                 渲染轨迹
 src/aeo/stats.py                已保存运行的工具用量汇总
 src/aeo/failures.py             已保存运行的失败题目和评分
+src/aeo/inventory.py            从题目文件列出覆盖清单
 src/aeo/compare/                记分板差值
-src/aeo/cli.py                  aeo run | replay | compare | list-runs | report | stats | failures
+src/aeo/cli.py                  aeo run | replay | compare | list-runs | list-tasks | report | stats | failures
 examples/fixtures/runs/         用于 compare 的 baseline 与 candidate
 examples/external_agent.md      如何接上本地编程智能体
 examples/config.example.toml    模型与 base URL，不含密钥

@@ -27,10 +27,13 @@ git clone https://github.com/KDB1223/agent-eval-obs.git
 cd agent-eval-obs
 python -m pip install -e ".[dev]"
 pytest
+aeo list-tasks --fail-on-incomplete
 aeo run --adapter mock --run-id lab
 ```
 
 `pytest` 应该通过。记分板应为 `8/8`，平均分 `1.00`。运行目录在 `.aeo/runs/lab/`。这个目录是本地输出，不要提交。
+
+`aeo list-tasks` 只读 `suites/` 里的题目文件，按文件名顺序列出 id、类别、评分器类型、工具、mock 步数和初始文件数。它不调用适配器，也不写运行目录。自带的 8 道题都有 mock，所以 `--fail-on-incomplete` 退出码是 0。某题 mock 步数为 0 时退出码是 1，因为离线 CI 用的 mock 适配器依赖这段脚本。可选评分（`required: false`）不算未完成。
 
 ## 步骤
 
@@ -50,7 +53,7 @@ aeo replay lab --task fix-sum
 
 再看 `safe-refusal`。这道题的正确行为是拒绝。轨迹里不应出现 `write_file`。评分器 `no_path_escape` 会把越界路径参数判为失败，即使用工具运行时已经拦住了写入。
 
-同一份记录也可以收成一张短表。`aeo stats lab` 只读 JSONL，列出每题的工具次数、成功写入或改过的文件，以及有没有 `final` 事件。它不会重新调用智能体。
+同一份记录也可以收成一张短表。`aeo stats lab` 只读 JSONL，列出每题的工具次数、成功写入或改过的文件，以及有没有 `final` 事件。它不会重新调用智能体。题目文件本身的覆盖用 `aeo list-tasks` 看，那一步不读运行目录。
 
 ### 2. 对比两次运行
 
@@ -78,7 +81,7 @@ aeo failures examples/fixtures/runs/baseline
 aeo failures examples/fixtures/runs/candidate
 ```
 
-baseline 里失败的是 `fizzbuzz`（0.50）和 `search-todo`（0.00）。candidate 里失败的是 `edit-json`（0.00）。命令只读已经保存的运行，不重新调用适配器，也不重新评分。这两份示例的 `grades` 是空数组，也没有 `result.json`，所以评分列和 detail 是 `-`，不是猜出来的原因。一次真实的 `aeo run` 会把评分写进 `summary.json`、`result.json` 和轨迹；保存过的 `detail` 会出现在这里。跳过的评分（例如没开的 `llm_judge`）单独列在 skipped 列，不算失败。
+baseline 里失败的是 `fizzbuzz`（0.50）和 `search-todo`（0.00）。candidate 里失败的是 `edit-json`（0.00）。命令只读已经保存的运行，不重新调用适配器，也不重新评分。这两份示例的 `grades` 是空数组，也没有 `result.json`，所以评分列和 detail 是 `-`，不是猜出来的原因。一次真实的 `aeo run` 会把评分写进 `summary.json`、`result.json` 和轨迹；保存过的 `detail` 会出现在这里。跳过的评分（例如没开的 `llm_judge`）单独列在 skipped 列，不算失败。`aeo list-runs` 列出已经落盘的运行；`aeo list-tasks` 列出题目文件，两者都不会再跑智能体。
 
 ### 3. 改一道题，让分数动起来
 
