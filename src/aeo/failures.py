@@ -29,7 +29,7 @@ def render_failures(
 
 def collect_failures(summary: dict, run_dir: Path, task_id: str | None = None) -> dict:
     """List failed tasks in summary order. Passing tasks are omitted."""
-    selected = _selected_tasks(summary, task_id)
+    selected = selected_tasks(summary, task_id)
     rows = [_task_row(task, run_dir) for task in selected if not task.get("passed")]
     return {
         "version": __version__,
@@ -41,12 +41,16 @@ def collect_failures(summary: dict, run_dir: Path, task_id: str | None = None) -
         "failed": len(rows),
         "considered": len(selected),
         "passed": len(selected) - len(rows),
-        "failed_graders": _rollup(rows),
+        "failed_graders": rollup_failed_graders(rows),
         "note": _NOTE,
     }
 
 
-def _selected_tasks(summary: dict, task_id: str | None) -> list[dict]:
+def selected_tasks(summary: dict, task_id: str | None) -> list[dict]:
+    """Tasks in summary order, or the one named by ``task_id``.
+
+    An unknown id is a usage error. ``aeo grades`` uses the same selection.
+    """
     tasks = list(summary["tasks"])
     if task_id is None:
         return tasks
@@ -57,7 +61,7 @@ def _selected_tasks(summary: dict, task_id: str | None) -> list[dict]:
 
 
 def _task_row(task: dict, run_dir: Path) -> dict:
-    grades = _resolve_grades(task, run_dir)
+    grades = resolve_grades(task, run_dir)
     failed, skipped = _split_grades(grades)
     error = _task_error(task)
     return {
@@ -71,7 +75,7 @@ def _task_row(task: dict, run_dir: Path) -> dict:
     }
 
 
-def _resolve_grades(task: dict, run_dir: Path) -> list[dict]:
+def resolve_grades(task: dict, run_dir: Path) -> list[dict]:
     """First non-empty source wins: summary, then result.json, then trajectory.
 
     An empty ``grades`` list does not count. When none of the sources has
@@ -108,8 +112,14 @@ def _take_grades(value: object) -> list[dict] | None:
     return [item for item in value if isinstance(item, dict)]
 
 
-def _split_grades(grades: list[dict]) -> tuple[list[dict], list[dict]]:
-    """Skipped grades are separate. Anything else whose ``passed`` is not true failed."""
+def classify_grades(grades: list[dict]) -> tuple[list[dict], list[dict], list[dict]]:
+    """Split grades into passed, failed, and skipped.
+
+    A grade is skipped when ``skipped`` is true, even if ``passed`` is also
+    true. A remaining grade is passed only when ``passed`` is true. Anything
+    else failed. ``aeo failures`` drops the passed list; ``aeo grades`` keeps it.
+    """
+    passed: list[dict] = []
     failed: list[dict] = []
     skipped: list[dict] = []
     for grade in grades:
@@ -117,8 +127,15 @@ def _split_grades(grades: list[dict]) -> tuple[list[dict], list[dict]]:
             skipped.append(grade)
             continue
         if grade.get("passed") is True:
+            passed.append(grade)
             continue
         failed.append(grade)
+    return passed, failed, skipped
+
+
+def _split_grades(grades: list[dict]) -> tuple[list[dict], list[dict]]:
+    """Skipped grades are separate. Anything else whose ``passed`` is not true failed."""
+    _passed, failed, skipped = classify_grades(grades)
     return failed, skipped
 
 
@@ -152,7 +169,7 @@ def _detail_text(failed: list[dict], error: str | None) -> str | None:
     return None
 
 
-def _rollup(rows: list[dict]) -> list[dict]:
+def rollup_failed_graders(rows: list[dict]) -> list[dict]:
     """Failed grader ids and types in first-seen order, with counts."""
     order: list[tuple[str | None, str | None]] = []
     counts: dict[tuple[str | None, str | None], int] = {}
@@ -183,7 +200,12 @@ def _grader_label(gid: str | None, gtype: str | None) -> str | None:
     return gid or gtype
 
 
-def _format_graders(grades: list[dict]) -> str:
+def format_graders(grades: list[dict]) -> str:
+    """``id:type`` labels in first-seen order. An empty list renders as ``-``.
+
+    A repeated id and type is listed again. The footer rollup is what
+    collapses those repeats.
+    """
     labels: list[str] = []
     for grade in grades:
         label = _grader_label(_grade_name(grade.get("id")), _grade_name(grade.get("type")))
@@ -194,7 +216,7 @@ def _format_graders(grades: list[dict]) -> str:
     return ", ".join(labels)
 
 
-def _format_rollup(items: list[dict]) -> str:
+def format_grader_rollup(items: list[dict]) -> str:
     parts: list[str] = []
     for item in items:
         label = _grader_label(item.get("id"), item.get("type"))
@@ -229,8 +251,8 @@ def _render_text(summary: dict, payload: dict) -> str:
                 str(row["task_id"]),
                 str(row["category"]),
                 f"{float(row['score']):.2f}",
-                _format_graders(row["failed_grades"]),
-                _format_graders(row["skipped_grades"]),
+                format_graders(row["failed_grades"]),
+                format_graders(row["skipped_grades"]),
                 row["detail"] or "-",
             ]
             for row in payload["tasks"]
@@ -243,7 +265,7 @@ def _render_text(summary: dict, payload: dict) -> str:
         )
         lines.append("")
         lines.append(_stat("failed", f"{payload['failed']}/{payload['considered']}"))
-        rollup = _format_rollup(payload["failed_graders"])
+        rollup = format_grader_rollup(payload["failed_graders"])
         if rollup:
             lines.append(_stat("graders", rollup))
     lines.extend(

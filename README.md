@@ -7,7 +7,7 @@
 
 Grade coding agents on your machine: reproducible offline scores, a JSONL trajectory for every task, and a regression scoreboard between two runs.
 
-`agent-eval-obs` (`aeo`) is a local-first harness. It prepares a fresh workspace for each task, asks a pluggable adapter to solve it, writes every prompt, tool call, observation, and grade to JSONL, then prints a scoreboard. The same files can be replayed later, summarized, checked for failures, or diffed against another run. The mock adapter needs no API key and no network, so CI can check the score.
+`agent-eval-obs` (`aeo`) is a local-first harness. It prepares a fresh workspace for each task, asks a pluggable adapter to solve it, writes every prompt, tool call, observation, and grade to JSONL, then prints a scoreboard. The same files can be replayed later, summarized, checked for failures, inventoried by grader, or diffed against another run. The mock adapter needs no API key and no network, so CI can check the score.
 
 中文说明：[README.zh-CN.md](README.zh-CN.md)。课程实验：[docs/lab-zh.md](docs/lab-zh.md)。
 
@@ -185,6 +185,38 @@ Read from the saved run. The agent was not re-run.
 
 Grades are taken from the first source that has a non-empty list: the task's `grades` in `summary.json`, then `tasks/<id>/result.json`, then events with `kind` `grade` in the trajectory. A real `aeo run` writes those grades. A failed grader's id, type, and saved `detail` show up when they are present. A skipped grader, such as an optional `llm_judge` left off, is listed under `skipped` and is not counted as a failure. A non-empty task `error` is included in the detail. `--task fizzbuzz` limits the table to one task. If that task passed, the command prints `no failures` and still exits 0. `--format json` prints the same inventory as one JSON object. Exit 0 means the report itself succeeded, including when the list is not empty.
 
+List every task in a saved run, including tasks that passed, with the graders that passed, failed, or were skipped. This reads the saved run. It does not call the adapter, and it does not grade the workspace again:
+
+```bash
+aeo grades examples/fixtures/runs/baseline
+```
+
+```text
+agent-eval-obs 0.1.0  run baseline  adapter=fixture  model=fixture
+
+task           category  result  score  passed graders  failed graders  skipped
+-------------  --------  ------  -----  --------------  --------------  -------
+fix-sum        coding    PASS    1.00   tests:pytest    -               -
+fizzbuzz       coding    FAIL    0.50   -               -               -
+parse-ints     coding    PASS    1.00   -               -               -
+add-docstring  coding    PASS    1.00   -               -               -
+read-config    tool-use  PASS    1.00   -               -               -
+search-todo    tool-use  FAIL    0.00   -               -               -
+edit-json      tool-use  PASS    1.00   -               -               -
+safe-refusal   tool-use  PASS    1.00   -               -               -
+
+passed        6/8
+failed        2/8
+grades        1 passed, 0 failed, 0 skipped
+run dir       examples/fixtures/runs/baseline
+
+Read from the saved run. The agent was not re-run.
+```
+
+All eight baseline tasks appear, in summary order. Six passed and two failed. The grade source is the same rule as `aeo failures`: the first non-empty list wins. An empty list does not count. Both fixtures store `"grades": []` and do not ship `result.json`. The candidate fixture has no trajectory, so every grader column there is `-`. On the baseline, seven tasks also have no saved `grade` event, so those columns are `-` too. That `-` is the saved data. The command does not invent a grader id from the suite. `fix-sum` is the exception in this fixture: its trajectory contains one `grade` event, `tests:pytest`, which passed, and that is the cell above. `aeo failures` omits that row because the task passed. A real `aeo run` writes grades into the summary, `result.json`, and the trajectory. This command only reads those files and does not re-run the agent.
+
+A grade is passed when `passed` is true and it is not skipped, skipped when `skipped` is true, and failed otherwise. Cells show `id:type` in first-seen order, or `-` when that list is empty. The `graders` line counts failed ids and types the same way `aeo failures` does, and it is omitted when nothing failed. `--task fix-sum` limits the table to one task, including a task that passed. `--format json` prints the same inventory as one JSON object. Exit 0 means the report itself succeeded, including when every task failed or every grade list is empty.
+
 List the gold task set from the suite files. This does not run an adapter, grade anything, or write a run directory:
 
 ```bash
@@ -263,6 +295,7 @@ src/aeo/graders               exact, contains, regex, pytest, JSON, tool use, ju
         ├── src/aeo/replay    print the trajectory
         ├── src/aeo/stats     tool counts from the JSONL log
         ├── src/aeo/failures  failed tasks and graders from the saved run
+        ├── src/aeo/grades    passed, failed, and skipped graders for every task
         ├── src/aeo/compare   per-task delta, category rollup, and pass rate
         └── aeo report        HTML or Markdown
 ```
@@ -277,6 +310,7 @@ aeo run --task fix-sum --task fizzbuzz          # repeat --task to filter
 aeo replay demo --task fix-sum --format text    # or json
 aeo stats RUN --task fix-sum --format text      # or json
 aeo failures RUN --task TASK_ID --format text   # or json
+aeo grades RUN --task TASK_ID --format text     # or json; includes tasks that passed
 aeo compare RUN_A RUN_B --format text --fail-on-regression    # or json
 aeo list-runs --root .aeo/runs
 aeo list-tasks --suite suites --format text     # or json; --fail-on-incomplete
@@ -366,7 +400,7 @@ Each line of `trajectory.jsonl` is one JSON object. `kind` is one of:
 
 `task_start`, `prompt`, `thought`, `tool_call`, `observation`, `final`, `grade`, `task_end`, `error`, `external_start`, `external`.
 
-A `tool_call` and its `observation` share `step` and `call_id`. `grade` rows are the same objects stored in `summary.json`. `replay` and `stats` read this file and stop there. `stats` counts tool calls and successful `edit_file` / `write_file` paths. `failures` uses `grade` events only when that task has no non-empty `grades` list in `summary.json` or `result.json`. None of these commands calls the agent.
+A `tool_call` and its `observation` share `step` and `call_id`. `grade` rows are the same objects stored in `summary.json`. `replay` and `stats` read this file and stop there. `stats` counts tool calls and successful `edit_file` / `write_file` paths. `failures` and `grades` use `grade` events only when that task has no non-empty `grades` list in `summary.json` or `result.json`. `grades` keeps every task, including the ones that passed. None of these commands calls the agent.
 
 ## Development
 
@@ -378,6 +412,7 @@ aeo run --adapter mock --run-id ci-mock
 aeo compare examples/fixtures/runs/baseline examples/fixtures/runs/candidate
 aeo stats examples/fixtures/runs/baseline
 aeo failures examples/fixtures/runs/baseline
+aeo grades examples/fixtures/runs/baseline
 ```
 
 Python 3.11 or newer. Runtime dependency: PyYAML. pytest is the dev extra, and the pytest grader uses the same interpreter. CI runs the test suite, `aeo list-tasks` on the shipped suite, and the mock scoreboard on 3.11 and 3.12.
@@ -394,9 +429,10 @@ src/aeo/graders/                rule graders and the optional judge
 src/aeo/replay/                 render a trajectory
 src/aeo/stats.py                tool-use summary of a saved run
 src/aeo/failures.py             failed tasks and graders from a saved run
+src/aeo/grades.py               passed, failed, and skipped graders for every task
 src/aeo/inventory.py            task inventory from suite files
 src/aeo/compare/                scoreboard diff
-src/aeo/cli.py                  aeo run | replay | compare | list-runs | list-tasks | report | stats | failures
+src/aeo/cli.py                  aeo run | replay | compare | list-runs | list-tasks | report | stats | failures | grades
 examples/fixtures/runs/         baseline and candidate for compare
 examples/external_agent.md      how to wrap a local coding agent
 examples/config.example.toml    model and base URL, no secrets
