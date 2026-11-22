@@ -7,7 +7,7 @@
 
 在本机给编程智能体打分：离线分数可复现，每个任务留下 JSONL 轨迹，两次运行可以做成回归记分板。
 
-`agent-eval-obs`（命令名 `aeo`）是一个本地优先的评测工具。它为每个任务准备一块新的工作区，调用可替换的适配器去解题，把提示、工具调用、观察和评分逐行写入 JSONL，然后打印记分板。同一份记录可以事后回放、汇总、列出失败，也可以和另一次运行对比。Mock 适配器不需要 API key，也不需要网络，因此 CI 可以直接核对分数。
+`agent-eval-obs`（命令名 `aeo`）是一个本地优先的评测工具。它为每个任务准备一块新的工作区，调用可替换的适配器去解题，把提示、工具调用、观察和评分逐行写入 JSONL，然后打印记分板。同一份记录可以事后回放、汇总、列出失败、按评分器列成清单，也可以和另一次运行对比。Mock 适配器不需要 API key，也不需要网络，因此 CI 可以直接核对分数。
 
 English: [README.md](README.md). 课程实验说明：[docs/lab-zh.md](docs/lab-zh.md).
 
@@ -166,6 +166,38 @@ baseline 里失败的是 `fizzbuzz`（0.50）和 `search-todo`（0.00），顺�
 
 评分按这个顺序取第一个非空列表：任务在 `summary.json` 里的 `grades`，然后是 `tasks/<id>/result.json`，最后是轨迹里 `kind` 为 `grade` 的事件。一次真实的 `aeo run` 会把评分写进这三处。失败评分的 id、type 和保存下来的 `detail` 会在有记录时出现。跳过的评分（例如没开的可选 `llm_judge`）写在 `skipped` 列，不算失败。任务上非空的 `error` 会进 detail。`--task fizzbuzz` 只留一行。如果这道题通过了，命令打印 `no failures`，退出码仍是 0。`--format json` 把同一份清单打成一个 JSON 对象。退出码 0 表示报告本身成功，即使清单不是空的。
 
+列出一次已经落盘的运行里每一道题的评分，包括通过的题。通过、失败、跳过的评分分列。这一步只读保存的结果，不调用适配器，也不再给工作区打分：
+
+```bash
+aeo grades examples/fixtures/runs/baseline
+```
+
+```text
+agent-eval-obs 0.1.0  run baseline  adapter=fixture  model=fixture
+
+task           category  result  score  passed graders  failed graders  skipped
+-------------  --------  ------  -----  --------------  --------------  -------
+fix-sum        coding    PASS    1.00   tests:pytest    -               -
+fizzbuzz       coding    FAIL    0.50   -               -               -
+parse-ints     coding    PASS    1.00   -               -               -
+add-docstring  coding    PASS    1.00   -               -               -
+read-config    tool-use  PASS    1.00   -               -               -
+search-todo    tool-use  FAIL    0.00   -               -               -
+edit-json      tool-use  PASS    1.00   -               -               -
+safe-refusal   tool-use  PASS    1.00   -               -               -
+
+passed        6/8
+failed        2/8
+grades        1 passed, 0 failed, 0 skipped
+run dir       examples/fixtures/runs/baseline
+
+Read from the saved run. The agent was not re-run.
+```
+
+baseline 的 8 道题都会出现，顺序与 summary 一致。6 道通过，2 道失败。评分来源与 `aeo failures` 相同，空数组不算。这两份示例的 `grades` 都是空数组，也没有 `result.json`。candidate 没有轨迹，所以评分列全是 `-`。baseline 里另外 7 道题也没有保存下来的 `grade` 事件，那些列同样是 `-`。这个 `-` 是记录里本来就没有，不是命令猜的。`fix-sum` 是这份示例里的例外：轨迹中有一条已经通过的 `grade` 事件，`tests:pytest`，通过列因此显示这个 id。`aeo failures` 不列出这一行，因为这道题通过了。一次真实的 `aeo run` 会把评分写进 summary、`result.json` 和轨迹。这条命令只读这些文件，不会重新跑智能体。
+
+`passed` 为真且没有跳过，算通过；`skipped` 为真，算跳过；其余 `passed` 不为真的算失败。单元格按首次出现写成 `id:type`，空列表写成 `-`。失败评分的 id 和 type 在表下的 `graders` 行合并计数，方式和 `aeo failures` 一样；没有失败评分时不打印这一行。`--task fix-sum` 只留一行，题通过了也会留下。`--format json` 把同一份清单打成一个 JSON 对象。退出码 0 表示报告本身成功，即使每道题都失败，或者每条评分列表都是空的。
+
 按题目文件列出这套题的覆盖情况。这一步不运行适配器，不评分，也不写运行目录：
 
 ```bash
@@ -244,6 +276,7 @@ src/aeo/graders               精确匹配、包含、正则、pytest、JSON、�
         ├── src/aeo/replay    打印轨迹
         ├── src/aeo/stats     从 JSONL 汇总工具次数
         ├── src/aeo/failures  从已保存的运行列出失败题目和评分
+        ├── src/aeo/grades    每一题通过、失败、跳过的评分
         ├── src/aeo/compare   逐题差值、分类汇总和通过率
         └── aeo report        HTML 或 Markdown
 ```
@@ -258,6 +291,7 @@ aeo run --task fix-sum --task fizzbuzz
 aeo replay demo --task fix-sum --format text
 aeo stats RUN --task fix-sum --format text
 aeo failures RUN --task TASK_ID --format text   # 或 json
+aeo grades RUN --task TASK_ID --format text     # 或 json；包括通过的题
 aeo compare RUN_A RUN_B --format text --fail-on-regression    # 或 json
 aeo list-runs --root .aeo/runs
 aeo list-tasks --suite suites --format text     # 或 json；--fail-on-incomplete
@@ -345,7 +379,7 @@ aeo run --adapter command \
 
 `task_start`、`prompt`、`thought`、`tool_call`、`observation`、`final`、`grade`、`task_end`、`error`、`external_start`、`external`。
 
-一次 `tool_call` 和对应的 `observation` 共用 `step` 与 `call_id`。`grade` 行与 `summary.json` 里的评分对象相同。`replay` 和 `stats` 只读这个文件。`stats` 统计工具调用，以及成功的 `edit_file` / `write_file` 路径。`failures` 只有在该题的 `summary.json` 和 `result.json` 都没有非空 `grades` 时，才使用这里的 `grade` 事件。这些命令都不会调用智能体。
+一次 `tool_call` 和对应的 `observation` 共用 `step` 与 `call_id`。`grade` 行与 `summary.json` 里的评分对象相同。`replay` 和 `stats` 只读这个文件。`stats` 统计工具调用，以及成功的 `edit_file` / `write_file` 路径。`failures` 和 `grades` 只有在该题的 `summary.json` 和 `result.json` 都没有非空 `grades` 时，才使用这里的 `grade` 事件。`grades` 会留下每一道题，包括通过的题。这些命令都不会调用智能体。
 
 ## 开发
 
@@ -357,6 +391,7 @@ aeo run --adapter mock --run-id ci-mock
 aeo compare examples/fixtures/runs/baseline examples/fixtures/runs/candidate
 aeo stats examples/fixtures/runs/baseline
 aeo failures examples/fixtures/runs/baseline
+aeo grades examples/fixtures/runs/baseline
 ```
 
 需要 Python 3.11 及以上。运行时依赖 PyYAML。pytest 是开发额外依赖，pytest 评分器使用当前解释器。CI 在 3.11 和 3.12 上运行测试、对自带套件执行 `aeo list-tasks`，以及 mock 记分板。
@@ -373,9 +408,10 @@ src/aeo/graders/                规则评分和可选评判模型
 src/aeo/replay/                 渲染轨迹
 src/aeo/stats.py                已保存运行的工具用量汇总
 src/aeo/failures.py             已保存运行的失败题目和评分
+src/aeo/grades.py               每一题通过、失败、跳过的评分
 src/aeo/inventory.py            从题目文件列出覆盖清单
 src/aeo/compare/                记分板差值
-src/aeo/cli.py                  aeo run | replay | compare | list-runs | list-tasks | report | stats | failures
+src/aeo/cli.py                  aeo run | replay | compare | list-runs | list-tasks | report | stats | failures | grades
 examples/fixtures/runs/         用于 compare 的 baseline 与 candidate
 examples/external_agent.md      如何接上本地编程智能体
 examples/config.example.toml    模型与 base URL，不含密钥

@@ -1,4 +1,4 @@
-"""Command-line interface: run, replay, compare, list-runs, list-tasks, report, stats, failures."""
+"""Command-line interface: run, replay, compare, list-runs, list-tasks, report, stats, failures, grades."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from aeo.adapters.factory import build_adapter
 from aeo.compare.diff import compare_runs, format_compare
 from aeo.errors import AeoError, UsageError
 from aeo.failures import render_failures
+from aeo.grades import render_grades
 from aeo.graders.llm_judge import LLMJudge, judge_enabled_from_env
 from aeo.inventory import render_inventory
 from aeo.replay.render import render_run
@@ -117,6 +118,13 @@ def build_parser() -> argparse.ArgumentParser:
     failures.add_argument("--root", default=".aeo/runs")
     failures.add_argument("--format", choices=["text", "json"], default="text")
     failures.set_defaults(func=_cmd_failures)
+
+    grades = commands.add_parser("grades", help="inventory grader outcomes for every task in a saved run")
+    grades.add_argument("run", help="run id or path to a run directory")
+    grades.add_argument("--task", default=None, help="one task id, including a task that passed")
+    grades.add_argument("--root", default=".aeo/runs")
+    grades.add_argument("--format", choices=["text", "json"], default="text")
+    grades.set_defaults(func=_cmd_grades)
     return parser
 
 
@@ -237,6 +245,13 @@ def _cmd_failures(args: argparse.Namespace) -> int:
     run_dir = resolve_run(args.run, args.root)
     summary = load_summary(run_dir)
     sys.stdout.write(render_failures(summary, run_dir, task_id=args.task, fmt=args.format))
+    return 0
+
+
+def _cmd_grades(args: argparse.Namespace) -> int:
+    run_dir = resolve_run(args.run, args.root)
+    summary = load_summary(run_dir)
+    sys.stdout.write(render_grades(summary, run_dir, task_id=args.task, fmt=args.format))
     return 0
 
 
