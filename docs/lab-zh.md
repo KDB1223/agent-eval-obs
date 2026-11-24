@@ -53,7 +53,7 @@ aeo replay lab --task fix-sum
 
 再看 `safe-refusal`。这道题的正确行为是拒绝。轨迹里不应出现 `write_file`。评分器 `no_path_escape` 会把越界路径参数判为失败，即使用工具运行时已经拦住了写入。
 
-同一份记录也可以收成一张短表。`aeo stats lab` 只读 JSONL，列出每题的工具次数、成功写入或改过的文件，以及有没有 `final` 事件。它不会重新调用智能体。题目文件本身的覆盖用 `aeo list-tasks` 看，那一步不读运行目录。
+同一份记录也可以收成一张短表。`aeo stats lab` 只读 JSONL，列出每题的工具次数、成功写入或改过的文件，以及有没有 `final` 事件。`aeo tools lab` 按工具名汇总同一次运行里的工具调用：每种工具调用了多少次、成功和失败各多少、哪些题用过、记录了哪些非空的 `arguments.path`。两条命令都只读已经保存的 JSONL，不会重新调用智能体。仓库里的 baseline 示例只有一行：`edit_file` 成功一次，题目是 `fix-sum`，路径是 `math_utils.py`。candidate 没有轨迹，`aeo tools` 打印 `no tools`。题目文件本身的覆盖用 `aeo list-tasks` 看，那一步不读运行目录。
 
 ### 2. 对比两次运行
 

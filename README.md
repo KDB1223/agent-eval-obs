@@ -7,7 +7,7 @@
 
 Grade coding agents on your machine: reproducible offline scores, a JSONL trajectory for every task, and a regression scoreboard between two runs.
 
-`agent-eval-obs` (`aeo`) is a local-first harness. It prepares a fresh workspace for each task, asks a pluggable adapter to solve it, writes every prompt, tool call, observation, and grade to JSONL, then prints a scoreboard. The same files can be replayed later, summarized, checked for failures, inventoried by grader, or diffed against another run. The mock adapter needs no API key and no network, so CI can check the score.
+`agent-eval-obs` (`aeo`) is a local-first harness. It prepares a fresh workspace for each task, asks a pluggable adapter to solve it, writes every prompt, tool call, observation, and grade to JSONL, then prints a scoreboard. The same files can be replayed later, summarized, inventoried by tool, checked for failures, inventoried by grader, or diffed against another run. The mock adapter needs no API key and no network, so CI can check the score.
 
 中文说明：[README.zh-CN.md](README.zh-CN.md)。课程实验：[docs/lab-zh.md](docs/lab-zh.md)。
 
@@ -161,6 +161,28 @@ Computed from the JSONL log. The agent was not re-run.
 
 In that fixture only `fix-sum` has a trajectory: one successful `edit_file` on `math_utils.py`, and a `final` event. The other rows come from the summary, with no tool counts and `final` of `no`. `--task fix-sum` limits the table to one row. `--format json` prints the same totals as one JSON object.
 
+Inventory every tool call in a saved run, grouped by tool name. `aeo stats` is a per-task summary and lists only successful `edit_file` / `write_file` paths. `aeo tools` counts every tool, success and failure, the tasks that called it, and the non-empty `arguments.path` values on those calls. This reads the saved JSONL. It does not call the adapter:
+
+```bash
+aeo tools examples/fixtures/runs/baseline
+```
+
+```text
+agent-eval-obs 0.1.0  run baseline  adapter=fixture  model=fixture
+
+tool       calls  ok  failed  tasks    paths
+---------  -----  --  ------  -------  -------------
+edit_file  1      1   0       fix-sum  math_utils.py
+
+tool kinds    1
+calls         1 (1 ok, 0 failed)
+run dir       examples/fixtures/runs/baseline
+
+Computed from the JSONL log. The agent was not re-run.
+```
+
+In that fixture only `fix-sum` has a trajectory: one successful `edit_file` on `math_utils.py`. The other seven tasks have no trajectory, so they add no calls. A call is successful only when it has a `call_id` and the last observation with that id has `ok` set to true. A missing or empty `call_id`, no paired observation, or a failed observation counts as a failure. Observations with no matching call are ignored. A tool name that is missing or empty is shown as `(missing)`. The candidate fixture has no trajectories, so `aeo tools examples/fixtures/runs/candidate` prints `no tools` and exits 0. `--task fix-sum` limits the inventory to one task. `--format json` prints the same inventory as one JSON object. Exit 0 means the report itself succeeded, including when there are no tool calls or every call failed.
+
 List the tasks that did not pass. This reads the saved run. It does not call the adapter, and it does not grade the workspace again:
 
 ```bash
@@ -294,6 +316,7 @@ src/aeo/graders               exact, contains, regex, pytest, JSON, tool use, ju
         │
         ├── src/aeo/replay    print the trajectory
         ├── src/aeo/stats     tool counts from the JSONL log
+        ├── src/aeo/tools     tool calls grouped by name from the JSONL log
         ├── src/aeo/failures  failed tasks and graders from the saved run
         ├── src/aeo/grades    passed, failed, and skipped graders for every task
         ├── src/aeo/compare   per-task delta, category rollup, and pass rate
@@ -309,6 +332,7 @@ aeo run --suite suites --adapter mock --run-id demo
 aeo run --task fix-sum --task fizzbuzz          # repeat --task to filter
 aeo replay demo --task fix-sum --format text    # or json
 aeo stats RUN --task fix-sum --format text      # or json
+aeo tools RUN --task fix-sum --format text      # or json
 aeo failures RUN --task TASK_ID --format text   # or json
 aeo grades RUN --task TASK_ID --format text     # or json; includes tasks that passed
 aeo compare RUN_A RUN_B --format text --fail-on-regression    # or json
@@ -400,7 +424,7 @@ Each line of `trajectory.jsonl` is one JSON object. `kind` is one of:
 
 `task_start`, `prompt`, `thought`, `tool_call`, `observation`, `final`, `grade`, `task_end`, `error`, `external_start`, `external`.
 
-A `tool_call` and its `observation` share `step` and `call_id`. `grade` rows are the same objects stored in `summary.json`. `replay` and `stats` read this file and stop there. `stats` counts tool calls and successful `edit_file` / `write_file` paths. `failures` and `grades` use `grade` events only when that task has no non-empty `grades` list in `summary.json` or `result.json`. `grades` keeps every task, including the ones that passed. None of these commands calls the agent.
+A `tool_call` and its `observation` share `step` and `call_id`. `grade` rows are the same objects stored in `summary.json`. `replay`, `stats`, and `tools` read this file and stop there. `stats` counts tool calls per task and lists successful `edit_file` / `write_file` paths. `tools` groups every `tool_call` by tool name, with success and failure counts and the recorded paths. `failures` and `grades` use `grade` events only when that task has no non-empty `grades` list in `summary.json` or `result.json`. `grades` keeps every task, including the ones that passed. None of these commands calls the agent.
 
 ## Development
 
@@ -411,6 +435,7 @@ aeo list-tasks --suite suites --fail-on-incomplete
 aeo run --adapter mock --run-id ci-mock
 aeo compare examples/fixtures/runs/baseline examples/fixtures/runs/candidate
 aeo stats examples/fixtures/runs/baseline
+aeo tools examples/fixtures/runs/baseline
 aeo failures examples/fixtures/runs/baseline
 aeo grades examples/fixtures/runs/baseline
 ```
@@ -428,11 +453,12 @@ src/aeo/runner/                 workspace jail, tool runtime, JSONL run director
 src/aeo/graders/                rule graders and the optional judge
 src/aeo/replay/                 render a trajectory
 src/aeo/stats.py                tool-use summary of a saved run
+src/aeo/tools.py                tool-call inventory grouped by name
 src/aeo/failures.py             failed tasks and graders from a saved run
 src/aeo/grades.py               passed, failed, and skipped graders for every task
 src/aeo/inventory.py            task inventory from suite files
 src/aeo/compare/                scoreboard diff
-src/aeo/cli.py                  aeo run | replay | compare | list-runs | list-tasks | report | stats | failures | grades
+src/aeo/cli.py                  aeo run | replay | compare | list-runs | list-tasks | report | stats | tools | failures | grades
 examples/fixtures/runs/         baseline and candidate for compare
 examples/external_agent.md      how to wrap a local coding agent
 examples/config.example.toml    model and base URL, no secrets
