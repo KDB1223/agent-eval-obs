@@ -1,4 +1,4 @@
-"""Command-line interface: run, replay, compare, list-runs, list-tasks, report, stats, failures, grades."""
+"""Command-line interface: run, replay, compare, list-runs, list-tasks, report, stats, tools, failures, grades."""
 
 from __future__ import annotations
 
@@ -23,6 +23,7 @@ from aeo.runner.store import load_summary, resolve_run
 from aeo.scoreboard import render_table
 from aeo.stats import render_stats
 from aeo.suites.loader import load_suite
+from aeo.tools import render_tools
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -111,6 +112,20 @@ def build_parser() -> argparse.ArgumentParser:
     stats.add_argument("--root", default=".aeo/runs")
     stats.add_argument("--format", choices=["text", "json"], default="text")
     stats.set_defaults(func=_cmd_stats)
+
+    tools_cmd = commands.add_parser(
+        "tools",
+        help="inventory tool calls from a saved run",
+        description=(
+            "Inventory tool calls recorded in a saved run, grouped by tool name. "
+            "Reads trajectory JSONL only. The agent is not re-run."
+        ),
+    )
+    tools_cmd.add_argument("run", help="run id or path to a run directory")
+    tools_cmd.add_argument("--task", default=None, help="one task id")
+    tools_cmd.add_argument("--root", default=".aeo/runs")
+    tools_cmd.add_argument("--format", choices=["text", "json"], default="text")
+    tools_cmd.set_defaults(func=_cmd_tools)
 
     failures = commands.add_parser("failures", help="list tasks that failed in a saved run")
     failures.add_argument("run", help="run id or path to a run directory")
@@ -238,6 +253,13 @@ def _cmd_stats(args: argparse.Namespace) -> int:
     run_dir = resolve_run(args.run, args.root)
     summary = load_summary(run_dir)
     sys.stdout.write(render_stats(summary, run_dir, task_id=args.task, fmt=args.format))
+    return 0
+
+
+def _cmd_tools(args: argparse.Namespace) -> int:
+    run_dir = resolve_run(args.run, args.root)
+    summary = load_summary(run_dir)
+    sys.stdout.write(render_tools(summary, run_dir, task_id=args.task, fmt=args.format))
     return 0
 
 
