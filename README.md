@@ -239,6 +239,41 @@ All eight baseline tasks appear, in summary order. Six passed and two failed. Th
 
 A grade is passed when `passed` is true and it is not skipped, skipped when `skipped` is true, and failed otherwise. Cells show `id:type` in first-seen order, or `-` when that list is empty. The `graders` line counts failed ids and types the same way `aeo failures` does, and it is omitted when nothing failed. `--task fix-sum` limits the table to one task, including a task that passed. `--format json` prints the same inventory as one JSON object. Exit 0 means the report itself succeeded, including when every task failed or every grade list is empty.
 
+Report how long a saved run spanned on the clock. This reads the `ts` already stored on each trajectory event. It does not call the adapter, re-run the agent, or grade the workspace again:
+
+```bash
+aeo timing examples/fixtures/runs/baseline
+```
+
+```text
+agent-eval-obs 0.1.0  run baseline  adapter=fixture  model=fixture
+
+task           result  score  events  started                   ended                     duration_ms  unparsed
+-------------  ------  -----  ------  ------------------------  ------------------------  -----------  --------
+fix-sum        PASS    1.00   8       2026-11-01T00:00:00.000Z  2026-11-01T00:00:00.007Z  7            0
+fizzbuzz       FAIL    0.50   0       -                         -                         -            0
+parse-ints     PASS    1.00   0       -                         -                         -            0
+add-docstring  PASS    1.00   0       -                         -                         -            0
+read-config    PASS    1.00   0       -                         -                         -            0
+search-todo    FAIL    0.00   0       -                         -                         -            0
+edit-json      PASS    1.00   0       -                         -                         -            0
+safe-refusal   PASS    1.00   0       -                         -                         -            0
+
+with timing   1/8
+events        8
+unparsed_ts   0
+started       2026-11-01T00:00:00.000Z
+ended         2026-11-01T00:00:00.007Z
+duration_ms   7
+run dir       examples/fixtures/runs/baseline
+
+Computed from the JSONL log. The agent was not re-run.
+```
+
+In that fixture only `fix-sum` has a trajectory: 8 events, from `2026-11-01T00:00:00.000Z` through `2026-11-01T00:00:00.007Z`. The duration is 7 ms. The other seven tasks have no trajectory file, so `events` is 0 and the timing columns are `-`. That `-` means the ends were not found. It is not a duration of 0. The run span walks tasks in summary order and events in file order, so the baseline run is the same 7 ms. The candidate fixture has no trajectories. `aeo timing examples/fixtures/runs/candidate` lists every summary task with `events` 0, `-` in the timing columns, and `with timing` of `0/8`, and it exits 0. The command does not invent timestamps.
+
+`started` and `ended` are the original `ts` strings of the first and last events whose `ts` parses as an aware datetime. They are not rewritten, and they are not the earliest and latest instants if the file is out of order. A missing, empty, non-string, or unparseable `ts` increments `unparsed` and does not move either end. `duration_ms` is a non-negative millisecond count when both ends parse: 0 when the instants are equal, and 0 when `ended` is earlier than `started`. When either end is missing, the duration is null in JSON and `-` in the table. `--task fix-sum` limits the table to one task. `--format json` prints the same report as one JSON object. Exit 0 means the report itself succeeded, including when no task has a trajectory or a computed duration is 0.
+
 List the gold task set from the suite files. This does not run an adapter, grade anything, or write a run directory:
 
 ```bash
@@ -319,6 +354,7 @@ src/aeo/graders               exact, contains, regex, pytest, JSON, tool use, ju
         ├── src/aeo/tools     tool calls grouped by name from the JSONL log
         ├── src/aeo/failures  failed tasks and graders from the saved run
         ├── src/aeo/grades    passed, failed, and skipped graders for every task
+        ├── src/aeo/timing    wall-clock span from ts values in the JSONL log
         ├── src/aeo/compare   per-task delta, category rollup, and pass rate
         └── aeo report        HTML or Markdown
 ```
@@ -335,6 +371,7 @@ aeo stats RUN --task fix-sum --format text      # or json
 aeo tools RUN --task fix-sum --format text      # or json
 aeo failures RUN --task TASK_ID --format text   # or json
 aeo grades RUN --task TASK_ID --format text     # or json; includes tasks that passed
+aeo timing RUN --task TASK_ID --format text     # or json; reads saved ts values
 aeo compare RUN_A RUN_B --format text --fail-on-regression    # or json
 aeo list-runs --root .aeo/runs
 aeo list-tasks --suite suites --format text     # or json; --fail-on-incomplete
@@ -424,7 +461,7 @@ Each line of `trajectory.jsonl` is one JSON object. `kind` is one of:
 
 `task_start`, `prompt`, `thought`, `tool_call`, `observation`, `final`, `grade`, `task_end`, `error`, `external_start`, `external`.
 
-A `tool_call` and its `observation` share `step` and `call_id`. `grade` rows are the same objects stored in `summary.json`. `replay`, `stats`, and `tools` read this file and stop there. `stats` counts tool calls per task and lists successful `edit_file` / `write_file` paths. `tools` groups every `tool_call` by tool name, with success and failure counts and the recorded paths. `failures` and `grades` use `grade` events only when that task has no non-empty `grades` list in `summary.json` or `result.json`. `grades` keeps every task, including the ones that passed. None of these commands calls the agent.
+A `tool_call` and its `observation` share `step` and `call_id`. `grade` rows are the same objects stored in `summary.json`. `replay`, `stats`, `tools`, and `timing` read this file and stop there. `stats` counts tool calls per task and lists successful `edit_file` / `write_file` paths. `tools` groups every `tool_call` by tool name, with success and failure counts and the recorded paths. `timing` reads the `ts` on each event and reports the wall-clock span. `failures` and `grades` use `grade` events only when that task has no non-empty `grades` list in `summary.json` or `result.json`. `grades` keeps every task, including the ones that passed. None of these commands calls the agent.
 
 ## Development
 
@@ -438,6 +475,8 @@ aeo stats examples/fixtures/runs/baseline
 aeo tools examples/fixtures/runs/baseline
 aeo failures examples/fixtures/runs/baseline
 aeo grades examples/fixtures/runs/baseline
+aeo timing examples/fixtures/runs/baseline
+aeo timing examples/fixtures/runs/candidate
 ```
 
 Python 3.11 or newer. Runtime dependency: PyYAML. pytest is the dev extra, and the pytest grader uses the same interpreter. CI runs the test suite, `aeo list-tasks` on the shipped suite, and the mock scoreboard on 3.11 and 3.12.
@@ -456,9 +495,10 @@ src/aeo/stats.py                tool-use summary of a saved run
 src/aeo/tools.py                tool-call inventory grouped by name
 src/aeo/failures.py             failed tasks and graders from a saved run
 src/aeo/grades.py               passed, failed, and skipped graders for every task
+src/aeo/timing.py               wall-clock span from ts values in a saved run
 src/aeo/inventory.py            task inventory from suite files
 src/aeo/compare/                scoreboard diff
-src/aeo/cli.py                  aeo run | replay | compare | list-runs | list-tasks | report | stats | tools | failures | grades
+src/aeo/cli.py                  aeo run | replay | compare | list-runs | list-tasks | report | stats | tools | failures | grades | timing
 examples/fixtures/runs/         baseline and candidate for compare
 examples/external_agent.md      how to wrap a local coding agent
 examples/config.example.toml    model and base URL, no secrets

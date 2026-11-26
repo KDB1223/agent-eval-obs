@@ -37,3 +37,7 @@ jobs:
         run: |
           aeo failures examples/fixtures/runs/baseline
           aeo failures examples/fixtures/runs/candidate
+      - name: Report fixture timing
+        run: |
+          aeo timing examples/fixtures/runs/baseline
+          aeo timing examples/fixtures/runs/candidate

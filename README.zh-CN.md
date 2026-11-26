@@ -220,6 +220,41 @@ baseline 的 8 道题都会出现，顺序与 summary 一致。6 道通过，2 �
 
 `passed` 为真且没有跳过，算通过；`skipped` 为真，算跳过；其余 `passed` 不为真的算失败。单元格按首次出现写成 `id:type`，空列表写成 `-`。失败评分的 id 和 type 在表下的 `graders` 行合并计数，方式和 `aeo failures` 一样；没有失败评分时不打印这一行。`--task fix-sum` 只留一行，题通过了也会留下。`--format json` 把同一份清单打成一个 JSON 对象。退出码 0 表示报告本身成功，即使每道题都失败，或者每条评分列表都是空的。
 
+报告一次已经落盘的运行在墙上时钟上跨了多久。这一步只读每条轨迹事件上已经写下的 `ts`，不调用适配器，不重新跑智能体，也不再给工作区打分：
+
+```bash
+aeo timing examples/fixtures/runs/baseline
+```
+
+```text
+agent-eval-obs 0.1.0  run baseline  adapter=fixture  model=fixture
+
+task           result  score  events  started                   ended                     duration_ms  unparsed
+-------------  ------  -----  ------  ------------------------  ------------------------  -----------  --------
+fix-sum        PASS    1.00   8       2026-11-01T00:00:00.000Z  2026-11-01T00:00:00.007Z  7            0
+fizzbuzz       FAIL    0.50   0       -                         -                         -            0
+parse-ints     PASS    1.00   0       -                         -                         -            0
+add-docstring  PASS    1.00   0       -                         -                         -            0
+read-config    PASS    1.00   0       -                         -                         -            0
+search-todo    FAIL    0.00   0       -                         -                         -            0
+edit-json      PASS    1.00   0       -                         -                         -            0
+safe-refusal   PASS    1.00   0       -                         -                         -            0
+
+with timing   1/8
+events        8
+unparsed_ts   0
+started       2026-11-01T00:00:00.000Z
+ended         2026-11-01T00:00:00.007Z
+duration_ms   7
+run dir       examples/fixtures/runs/baseline
+
+Computed from the JSONL log. The agent was not re-run.
+```
+
+这份示例里只有 `fix-sum` 有轨迹：8 个事件，从 `2026-11-01T00:00:00.000Z` 到 `2026-11-01T00:00:00.007Z`，时长 7 毫秒。另外 7 道题没有轨迹文件，所以 `events` 是 0，时间列是 `-`。这个 `-` 表示没有找到两端，不是时长 0。运行级的跨度按 summary 顺序走题目、再按文件顺序走事件，所以 baseline 整次运行也是这 7 毫秒。candidate 没有任何轨迹。`aeo timing examples/fixtures/runs/candidate` 会把 summary 里的每一题都列出来，`events` 为 0，时间列是 `-`，`with timing` 是 `0/8`，退出码为 0。命令不会编造时间戳。
+
+`started` 和 `ended` 是文件里第一条和最后一条能解析成带时区时间的 `ts` 原文字符串。它们不会被改写，也不是文件乱序时的最早和最晚时刻。缺失、空白、非字符串或无法解析的 `ts` 会计入 `unparsed`，并且不会挪动两端。两端都能解析时，`duration_ms` 是一个非负的毫秒数：两个时刻相同是 0，`ended` 早于 `started` 也是 0。任一端缺失时，JSON 里的时长是 null，表里是 `-`。`--task fix-sum` 只留一行。`--format json` 把同一份报告打成一个 JSON 对象。退出码 0 表示报告本身成功，即使没有题目带轨迹，或者算出来的时长是 0。
+
 按题目文件列出这套题的覆盖情况。这一步不运行适配器，不评分，也不写运行目录：
 
 ```bash
@@ -300,6 +335,7 @@ src/aeo/graders               精确匹配、包含、正则、pytest、JSON、�
         ├── src/aeo/tools     从 JSONL 按工具名清点调用
         ├── src/aeo/failures  从已保存的运行列出失败题目和评分
         ├── src/aeo/grades    每一题通过、失败、跳过的评分
+        ├── src/aeo/timing    从 JSONL 里的 ts 计算墙钟跨度
         ├── src/aeo/compare   逐题差值、分类汇总和通过率
         └── aeo report        HTML 或 Markdown
 ```
@@ -316,6 +352,7 @@ aeo stats RUN --task fix-sum --format text
 aeo tools RUN --task fix-sum --format text      # 或 json
 aeo failures RUN --task TASK_ID --format text   # 或 json
 aeo grades RUN --task TASK_ID --format text     # 或 json；包括通过的题
+aeo timing RUN --task TASK_ID --format text     # 或 json；只读已保存的 ts
 aeo compare RUN_A RUN_B --format text --fail-on-regression    # 或 json
 aeo list-runs --root .aeo/runs
 aeo list-tasks --suite suites --format text     # 或 json；--fail-on-incomplete
@@ -403,7 +440,7 @@ aeo run --adapter command \
 
 `task_start`、`prompt`、`thought`、`tool_call`、`observation`、`final`、`grade`、`task_end`、`error`、`external_start`、`external`。
 
-一次 `tool_call` 和对应的 `observation` 共用 `step` 与 `call_id`。`grade` 行与 `summary.json` 里的评分对象相同。`replay`、`stats` 和 `tools` 只读这个文件。`stats` 按题统计工具调用，并列出成功的 `edit_file` / `write_file` 路径。`tools` 按工具名汇总每一次 `tool_call`，带上成功和失败次数，以及记录下来的路径。`failures` 和 `grades` 只有在该题的 `summary.json` 和 `result.json` 都没有非空 `grades` 时，才使用这里的 `grade` 事件。`grades` 会留下每一道题，包括通过的题。这些命令都不会调用智能体。
+一次 `tool_call` 和对应的 `observation` 共用 `step` 与 `call_id`。`grade` 行与 `summary.json` 里的评分对象相同。`replay`、`stats`、`tools` 和 `timing` 只读这个文件。`stats` 按题统计工具调用，并列出成功的 `edit_file` / `write_file` 路径。`tools` 按工具名汇总每一次 `tool_call`，带上成功和失败次数，以及记录下来的路径。`timing` 读取每条事件上的 `ts`，报告墙钟跨度。`failures` 和 `grades` 只有在该题的 `summary.json` 和 `result.json` 都没有非空 `grades` 时，才使用这里的 `grade` 事件。`grades` 会留下每一道题，包括通过的题。这些命令都不会调用智能体。
 
 ## 开发
 
@@ -417,6 +454,8 @@ aeo stats examples/fixtures/runs/baseline
 aeo tools examples/fixtures/runs/baseline
 aeo failures examples/fixtures/runs/baseline
 aeo grades examples/fixtures/runs/baseline
+aeo timing examples/fixtures/runs/baseline
+aeo timing examples/fixtures/runs/candidate
 ```
 
 需要 Python 3.11 及以上。运行时依赖 PyYAML。pytest 是开发额外依赖，pytest 评分器使用当前解释器。CI 在 3.11 和 3.12 上运行测试、对自带套件执行 `aeo list-tasks`，以及 mock 记分板。
@@ -435,9 +474,10 @@ src/aeo/stats.py                已保存运行的工具用量汇总
 src/aeo/tools.py                按工具名清点已保存运行的工具调用
 src/aeo/failures.py             已保存运行的失败题目和评分
 src/aeo/grades.py               每一题通过、失败、跳过的评分
+src/aeo/timing.py               从已保存运行的 ts 计算墙钟跨度
 src/aeo/inventory.py            从题目文件列出覆盖清单
 src/aeo/compare/                记分板差值
-src/aeo/cli.py                  aeo run | replay | compare | list-runs | list-tasks | report | stats | tools | failures | grades
+src/aeo/cli.py                  aeo run | replay | compare | list-runs | list-tasks | report | stats | tools | failures | grades | timing
 examples/fixtures/runs/         用于 compare 的 baseline 与 candidate
 examples/external_agent.md      如何接上本地编程智能体
 examples/config.example.toml    模型与 base URL，不含密钥
