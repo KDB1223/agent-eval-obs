@@ -1,4 +1,4 @@
-"""Command-line interface: run, replay, compare, list-runs, list-tasks, report, stats, tools, failures, grades."""
+"""Command-line interface: run, replay, compare, list-runs, list-tasks, report, stats, tools, failures, grades, timing."""
 
 from __future__ import annotations
 
@@ -23,6 +23,7 @@ from aeo.runner.store import load_summary, resolve_run
 from aeo.scoreboard import render_table
 from aeo.stats import render_stats
 from aeo.suites.loader import load_suite
+from aeo.timing import render_timing
 from aeo.tools import render_tools
 
 
@@ -140,6 +141,20 @@ def build_parser() -> argparse.ArgumentParser:
     grades.add_argument("--root", default=".aeo/runs")
     grades.add_argument("--format", choices=["text", "json"], default="text")
     grades.set_defaults(func=_cmd_grades)
+
+    timing = commands.add_parser(
+        "timing",
+        help="report wall-clock span from timestamps in a saved run",
+        description=(
+            "Reconstruct wall-clock timing from ts values already stored in a saved run. "
+            "Reads trajectory JSONL only. The agent is not re-run."
+        ),
+    )
+    timing.add_argument("run", help="run id or path to a run directory")
+    timing.add_argument("--task", default=None, help="one task id")
+    timing.add_argument("--root", default=".aeo/runs")
+    timing.add_argument("--format", choices=["text", "json"], default="text")
+    timing.set_defaults(func=_cmd_timing)
     return parser
 
 
@@ -274,6 +289,13 @@ def _cmd_grades(args: argparse.Namespace) -> int:
     run_dir = resolve_run(args.run, args.root)
     summary = load_summary(run_dir)
     sys.stdout.write(render_grades(summary, run_dir, task_id=args.task, fmt=args.format))
+    return 0
+
+
+def _cmd_timing(args: argparse.Namespace) -> int:
+    run_dir = resolve_run(args.run, args.root)
+    summary = load_summary(run_dir)
+    sys.stdout.write(render_timing(summary, run_dir, task_id=args.task, fmt=args.format))
     return 0
 
 

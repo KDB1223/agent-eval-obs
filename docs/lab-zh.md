@@ -53,7 +53,7 @@ aeo replay lab --task fix-sum
 
 再看 `safe-refusal`。这道题的正确行为是拒绝。轨迹里不应出现 `write_file`。评分器 `no_path_escape` 会把越界路径参数判为失败，即使用工具运行时已经拦住了写入。
 
-同一份记录也可以收成一张短表。`aeo stats lab` 只读 JSONL，列出每题的工具次数、成功写入或改过的文件，以及有没有 `final` 事件。`aeo tools lab` 按工具名汇总同一次运行里的工具调用：每种工具调用了多少次、成功和失败各多少、哪些题用过、记录了哪些非空的 `arguments.path`。两条命令都只读已经保存的 JSONL，不会重新调用智能体。仓库里的 baseline 示例只有一行：`edit_file` 成功一次，题目是 `fix-sum`，路径是 `math_utils.py`。candidate 没有轨迹，`aeo tools` 打印 `no tools`。题目文件本身的覆盖用 `aeo list-tasks` 看，那一步不读运行目录。
+同一份记录也可以收成一张短表。`aeo stats lab` 只读 JSONL，列出每题的工具次数、成功写入或改过的文件，以及有没有 `final` 事件。`aeo tools lab` 按工具名汇总同一次运行里的工具调用：每种工具调用了多少次、成功和失败各多少、哪些题用过、记录了哪些非空的 `arguments.path`。`aeo timing lab` 只读每条事件上已经写下的 `ts`，按文件顺序取第一条和最后一条能解析的时间，得到墙钟跨度。三条命令都只读已经保存的 JSONL，不会重新调用智能体。仓库里的 baseline 示例里，`aeo tools` 只有一行：`edit_file` 成功一次，题目是 `fix-sum`，路径是 `math_utils.py`。同一份轨迹有 8 个事件，从 `2026-11-01T00:00:00.000Z` 到 `2026-11-01T00:00:00.007Z`，`aeo timing` 给出 7 毫秒；另外 7 道题没有轨迹。candidate 没有轨迹，`aeo tools` 打印 `no tools`，`aeo timing` 把每道题都列成没有时间，退出码仍是 0。题目文件本身的覆盖用 `aeo list-tasks` 看，那一步不读运行目录。
 
 ### 2. 对比两次运行
 
@@ -90,6 +90,15 @@ aeo grades examples/fixtures/runs/baseline
 ```
 
 8 道题都会出现。示例的 `summary.json` 里 `grades` 是空数组，也没有 `result.json`。candidate 没有轨迹，评分列都是 `-`。baseline 里只有 `fix-sum` 的轨迹保存了一条通过的 `grade` 事件（`tests:pytest`），所以只有这一格不是 `-`。这是读到的记录，不是猜的评分器。一次真实的 `aeo run` 会把评分写进 summary、`result.json` 和轨迹；`aeo grades` 不重新调用智能体。
+
+这道题的轨迹上也有 `ts`。墙钟跨度用：
+
+```bash
+aeo timing examples/fixtures/runs/baseline
+aeo timing examples/fixtures/runs/candidate
+```
+
+baseline 里只有 `fix-sum` 有轨迹，8 个事件从 `2026-11-01T00:00:00.000Z` 到 `2026-11-01T00:00:00.007Z`，时长 7 毫秒。另外 7 道题没有轨迹文件，时间列是 `-`。candidate 没有轨迹，每一题都没有时间，命令退出码是 0。两条命令都只读已经保存的 `ts`，不重新调用智能体，也不会编造时间戳。
 
 ### 3. 改一道题，让分数动起来
 
