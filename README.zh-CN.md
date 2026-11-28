@@ -7,7 +7,7 @@
 
 在本机给编程智能体打分：离线分数可复现，每个任务留下 JSONL 轨迹，两次运行可以做成回归记分板。
 
-`agent-eval-obs`（命令名 `aeo`）是一个本地优先的评测工具。它为每个任务准备一块新的工作区，调用可替换的适配器去解题，把提示、工具调用、观察和评分逐行写入 JSONL，然后打印记分板。同一份记录可以事后回放、汇总、按工具名清点调用、列出失败、按评分器列成清单，也可以和另一次运行对比。Mock 适配器不需要 API key，也不需要网络，因此 CI 可以直接核对分数。
+`agent-eval-obs`（命令名 `aeo`）是一个本地优先的评测工具。它为每个任务准备一块新的工作区，调用可替换的适配器去解题，把提示、工具调用、观察和评分逐行写入 JSONL，然后打印记分板。同一份记录可以事后回放、汇总、按工具名或按记录的路径清点调用、列出失败、按评分器列成清单，也可以和另一次运行对比。Mock 适配器不需要 API key，也不需要网络，因此 CI 可以直接核对分数。
 
 English: [README.md](README.md). 课程实验说明：[docs/lab-zh.md](docs/lab-zh.md).
 
@@ -163,6 +163,28 @@ Computed from the JSONL log. The agent was not re-run.
 ```
 
 这份示例里只有 `fix-sum` 有轨迹：一次成功的 `edit_file`，路径是 `math_utils.py`。另外 7 道题没有轨迹，所以不会多出调用。一次调用要算成功，必须有 `call_id`，并且同 id 的最后一条 `observation` 的 `ok` 为真。没有或空的 `call_id`、没有配对的观察，或者最后一条观察失败，都算失败。没有对应调用的观察会被忽略。工具名缺失或为空时显示 `(missing)`。candidate 没有任何轨迹，所以 `aeo tools examples/fixtures/runs/candidate` 打印 `no tools`，退出码为 0。`--task fix-sum` 只统计一道题。`--format json` 把同一份清单打成一个 JSON 对象。退出码 0 表示报告本身成功，即使没有工具调用，或者每一次调用都失败。
+
+按记录的路径清点同一次运行里的工具调用。`aeo stats` 按题目汇总，并且只列出成功的 `edit_file` / `write_file` 路径。`aeo tools` 按工具名汇总每一次调用，并在每种工具下列出非空的 `arguments.path`。`aeo files` 按路径字符串再汇总这些调用：这个路径被碰到多少次、成功和失败各多少、哪些工具、哪些题。这一步只读保存的 JSONL，不会调用适配器，也不扫描 `tasks/<id>/workspace/` 里留下的文件：
+
+```bash
+aeo files examples/fixtures/runs/baseline
+```
+
+```text
+agent-eval-obs 0.1.0  run baseline  adapter=fixture  model=fixture
+
+path           calls  ok  failed  tools      tasks
+-------------  -----  --  ------  ---------  -------
+math_utils.py  1      1   0       edit_file  fix-sum
+
+path kinds    1
+calls         1 (1 ok, 0 failed)
+run dir       examples/fixtures/runs/baseline
+
+Computed from the JSONL log. The agent was not re-run.
+```
+
+这份示例里只有 `fix-sum` 有轨迹：一次成功的 `edit_file`，路径是 `math_utils.py`。另外 7 道题没有轨迹，所以不会多出路径。一次调用要算成功，必须有 `call_id`，并且同 id 的最后一条 `observation` 的 `ok` 为真。没有或空的 `call_id`、没有配对的观察，或者最后一条观察失败，都算失败。没有对应调用的观察会被忽略。路径取 `arguments.path`，并且只有它是非空字符串时才原样保留，不改写、不解析。缺失、为空或不是字符串的路径显示为 `(missing)`。candidate 没有任何轨迹，所以 `aeo files examples/fixtures/runs/candidate` 打印 `no files`，退出码为 0。`--task fix-sum` 只统计一道题。`--format json` 把同一份清单打成一个 JSON 对象。退出码 0 表示报告本身成功，即使没有路径，或者每一次调用都失败。
 
 列出一次已经落盘的运行里没有通过的题目。这一步只读保存的结果，不调用适配器，也不再给工作区打分：
 
@@ -333,6 +355,7 @@ src/aeo/graders               精确匹配、包含、正则、pytest、JSON、�
         ├── src/aeo/replay    打印轨迹
         ├── src/aeo/stats     从 JSONL 汇总工具次数
         ├── src/aeo/tools     从 JSONL 按工具名清点调用
+        ├── src/aeo/files     从 JSONL 按记录的路径清点调用
         ├── src/aeo/failures  从已保存的运行列出失败题目和评分
         ├── src/aeo/grades    每一题通过、失败、跳过的评分
         ├── src/aeo/timing    从 JSONL 里的 ts 计算墙钟跨度
@@ -350,6 +373,7 @@ aeo run --task fix-sum --task fizzbuzz
 aeo replay demo --task fix-sum --format text
 aeo stats RUN --task fix-sum --format text
 aeo tools RUN --task fix-sum --format text      # 或 json
+aeo files RUN --task fix-sum --format text      # 或 json；只读已记录的路径
 aeo failures RUN --task TASK_ID --format text   # 或 json
 aeo grades RUN --task TASK_ID --format text     # 或 json；包括通过的题
 aeo timing RUN --task TASK_ID --format text     # 或 json；只读已保存的 ts
@@ -440,7 +464,7 @@ aeo run --adapter command \
 
 `task_start`、`prompt`、`thought`、`tool_call`、`observation`、`final`、`grade`、`task_end`、`error`、`external_start`、`external`。
 
-一次 `tool_call` 和对应的 `observation` 共用 `step` 与 `call_id`。`grade` 行与 `summary.json` 里的评分对象相同。`replay`、`stats`、`tools` 和 `timing` 只读这个文件。`stats` 按题统计工具调用，并列出成功的 `edit_file` / `write_file` 路径。`tools` 按工具名汇总每一次 `tool_call`，带上成功和失败次数，以及记录下来的路径。`timing` 读取每条事件上的 `ts`，报告墙钟跨度。`failures` 和 `grades` 只有在该题的 `summary.json` 和 `result.json` 都没有非空 `grades` 时，才使用这里的 `grade` 事件。`grades` 会留下每一道题，包括通过的题。这些命令都不会调用智能体。
+一次 `tool_call` 和对应的 `observation` 共用 `step` 与 `call_id`。`grade` 行与 `summary.json` 里的评分对象相同。`replay`、`stats`、`tools`、`files` 和 `timing` 只读这个文件。`stats` 按题统计工具调用，并列出成功的 `edit_file` / `write_file` 路径。`tools` 按工具名汇总每一次 `tool_call`，带上成功和失败次数，以及记录下来的路径。`files` 按记录的路径汇总每一次 `tool_call`，路径缺失的调用也算在内。`timing` 读取每条事件上的 `ts`，报告墙钟跨度。`failures` 和 `grades` 只有在该题的 `summary.json` 和 `result.json` 都没有非空 `grades` 时，才使用这里的 `grade` 事件。`grades` 会留下每一道题，包括通过的题。这些命令都不会调用智能体。
 
 ## 开发
 
@@ -452,6 +476,8 @@ aeo run --adapter mock --run-id ci-mock
 aeo compare examples/fixtures/runs/baseline examples/fixtures/runs/candidate
 aeo stats examples/fixtures/runs/baseline
 aeo tools examples/fixtures/runs/baseline
+aeo files examples/fixtures/runs/baseline
+aeo files examples/fixtures/runs/candidate
 aeo failures examples/fixtures/runs/baseline
 aeo grades examples/fixtures/runs/baseline
 aeo timing examples/fixtures/runs/baseline
@@ -472,12 +498,13 @@ src/aeo/graders/                规则评分和可选评判模型
 src/aeo/replay/                 渲染轨迹
 src/aeo/stats.py                已保存运行的工具用量汇总
 src/aeo/tools.py                按工具名清点已保存运行的工具调用
+src/aeo/files.py                按记录的路径清点已保存运行的工具调用
 src/aeo/failures.py             已保存运行的失败题目和评分
 src/aeo/grades.py               每一题通过、失败、跳过的评分
 src/aeo/timing.py               从已保存运行的 ts 计算墙钟跨度
 src/aeo/inventory.py            从题目文件列出覆盖清单
 src/aeo/compare/                记分板差值
-src/aeo/cli.py                  aeo run | replay | compare | list-runs | list-tasks | report | stats | tools | failures | grades | timing
+src/aeo/cli.py                  aeo run | replay | compare | list-runs | list-tasks | report | stats | tools | files | failures | grades | timing
 examples/fixtures/runs/         用于 compare 的 baseline 与 candidate
 examples/external_agent.md      如何接上本地编程智能体
 examples/config.example.toml    模型与 base URL，不含密钥

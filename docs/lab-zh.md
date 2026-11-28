@@ -53,7 +53,7 @@ aeo replay lab --task fix-sum
 
 再看 `safe-refusal`。这道题的正确行为是拒绝。轨迹里不应出现 `write_file`。评分器 `no_path_escape` 会把越界路径参数判为失败，即使用工具运行时已经拦住了写入。
 
-同一份记录也可以收成一张短表。`aeo stats lab` 只读 JSONL，列出每题的工具次数、成功写入或改过的文件，以及有没有 `final` 事件。`aeo tools lab` 按工具名汇总同一次运行里的工具调用：每种工具调用了多少次、成功和失败各多少、哪些题用过、记录了哪些非空的 `arguments.path`。`aeo timing lab` 只读每条事件上已经写下的 `ts`，按文件顺序取第一条和最后一条能解析的时间，得到墙钟跨度。三条命令都只读已经保存的 JSONL，不会重新调用智能体。仓库里的 baseline 示例里，`aeo tools` 只有一行：`edit_file` 成功一次，题目是 `fix-sum`，路径是 `math_utils.py`。同一份轨迹有 8 个事件，从 `2026-11-01T00:00:00.000Z` 到 `2026-11-01T00:00:00.007Z`，`aeo timing` 给出 7 毫秒；另外 7 道题没有轨迹。candidate 没有轨迹，`aeo tools` 打印 `no tools`，`aeo timing` 把每道题都列成没有时间，退出码仍是 0。题目文件本身的覆盖用 `aeo list-tasks` 看，那一步不读运行目录。
+同一份记录也可以收成一张短表。`aeo stats lab` 只读 JSONL，列出每题的工具次数、成功写入或改过的文件，以及有没有 `final` 事件。`aeo tools lab` 按工具名汇总同一次运行里的工具调用：每种工具调用了多少次、成功和失败各多少、哪些题用过、记录了哪些非空的 `arguments.path`。`aeo files lab` 按这些调用上记录的路径再汇总一次：每个路径被碰到多少次、成功和失败各多少、哪些工具、哪些题。它只认轨迹里的 `arguments.path`，不扫工作区里留下的文件。路径缺失、为空或不是字符串时记成 `(missing)`。`aeo timing lab` 只读每条事件上已经写下的 `ts`，按文件顺序取第一条和最后一条能解析的时间，得到墙钟跨度。四条命令都只读已经保存的 JSONL，不会重新调用智能体。仓库里的 baseline 示例里，`aeo tools` 只有一行：`edit_file` 成功一次，题目是 `fix-sum`，路径是 `math_utils.py`。`aeo files` 把同一条调用收成一行路径 `math_utils.py`。同一份轨迹有 8 个事件，从 `2026-11-01T00:00:00.000Z` 到 `2026-11-01T00:00:00.007Z`，`aeo timing` 给出 7 毫秒；另外 7 道题没有轨迹。candidate 没有轨迹，`aeo tools` 打印 `no tools`，`aeo files` 打印 `no files`，`aeo timing` 把每道题都列成没有时间，退出码仍是 0。题目文件本身的覆盖用 `aeo list-tasks` 看，那一步不读运行目录。
 
 ### 2. 对比两次运行
 
@@ -99,6 +99,15 @@ aeo timing examples/fixtures/runs/candidate
 ```
 
 baseline 里只有 `fix-sum` 有轨迹，8 个事件从 `2026-11-01T00:00:00.000Z` 到 `2026-11-01T00:00:00.007Z`，时长 7 毫秒。另外 7 道题没有轨迹文件，时间列是 `-`。candidate 没有轨迹，每一题都没有时间，命令退出码是 0。两条命令都只读已经保存的 `ts`，不重新调用智能体，也不会编造时间戳。
+
+同一条轨迹上记录的路径用：
+
+```bash
+aeo files examples/fixtures/runs/baseline
+aeo files examples/fixtures/runs/candidate
+```
+
+baseline 里只有 `fix-sum` 记了一条成功的 `edit_file`，路径是 `math_utils.py`。另外 7 道题没有轨迹，所以不会多出路径。candidate 没有轨迹，命令打印 `no files`，退出码是 0。这两条命令只读已经保存的工具调用，不扫描 `workspace/`，也不重新调用智能体。
 
 ### 3. 改一道题，让分数动起来
 

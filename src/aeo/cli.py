@@ -1,4 +1,4 @@
-"""Command-line interface: run, replay, compare, list-runs, list-tasks, report, stats, tools, failures, grades, timing."""
+"""Command-line interface: run, replay, compare, list-runs, list-tasks, report, stats, tools, files, failures, grades, timing."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from aeo.adapters.factory import build_adapter
 from aeo.compare.diff import compare_runs, format_compare
 from aeo.errors import AeoError, UsageError
 from aeo.failures import render_failures
+from aeo.files import render_files
 from aeo.grades import render_grades
 from aeo.graders.llm_judge import LLMJudge, judge_enabled_from_env
 from aeo.inventory import render_inventory
@@ -127,6 +128,20 @@ def build_parser() -> argparse.ArgumentParser:
     tools_cmd.add_argument("--root", default=".aeo/runs")
     tools_cmd.add_argument("--format", choices=["text", "json"], default="text")
     tools_cmd.set_defaults(func=_cmd_tools)
+
+    files_cmd = commands.add_parser(
+        "files",
+        help="inventory recorded paths from a saved run",
+        description=(
+            "Inventory workspace paths recorded in a saved run, grouped by path. "
+            "Reads trajectory JSONL only. The agent is not re-run."
+        ),
+    )
+    files_cmd.add_argument("run", help="run id or path to a run directory")
+    files_cmd.add_argument("--task", default=None, help="one task id")
+    files_cmd.add_argument("--root", default=".aeo/runs")
+    files_cmd.add_argument("--format", choices=["text", "json"], default="text")
+    files_cmd.set_defaults(func=_cmd_files)
 
     failures = commands.add_parser("failures", help="list tasks that failed in a saved run")
     failures.add_argument("run", help="run id or path to a run directory")
@@ -275,6 +290,13 @@ def _cmd_tools(args: argparse.Namespace) -> int:
     run_dir = resolve_run(args.run, args.root)
     summary = load_summary(run_dir)
     sys.stdout.write(render_tools(summary, run_dir, task_id=args.task, fmt=args.format))
+    return 0
+
+
+def _cmd_files(args: argparse.Namespace) -> int:
+    run_dir = resolve_run(args.run, args.root)
+    summary = load_summary(run_dir)
+    sys.stdout.write(render_files(summary, run_dir, task_id=args.task, fmt=args.format))
     return 0
 
 
